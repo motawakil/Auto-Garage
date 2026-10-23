@@ -7,7 +7,9 @@ from rest_framework.routers import DefaultRouter
 from apps.billing.views import InvoiceViewSet, PaymentViewSet, QuoteViewSet
 from apps.clients.views import ClientViewSet, VehicleViewSet
 from apps.core import views as core
-from apps.inventory.views import PartViewSet, StockMovementViewSet, SupplierViewSet
+from apps.inventory.views import (
+    OemEquivalenceViewSet, OemReferenceViewSet, PartViewSet, StockMovementViewSet, SupplierViewSet,
+)
 from apps.repairs.views import ExpertViewSet, InsuranceCompanyViewSet, RepairOrderViewSet, RepairTaskViewSet
 from apps.staff.views import EmployeeViewSet
 
@@ -24,6 +26,8 @@ router.register('payments', PaymentViewSet, basename='payment')
 router.register('parts', PartViewSet, basename='part')
 router.register('stock-movements', StockMovementViewSet, basename='stock-movement')
 router.register('suppliers', SupplierViewSet, basename='supplier')
+router.register('oem-references', OemReferenceViewSet, basename='oem-reference')
+router.register('oem-equivalences', OemEquivalenceViewSet, basename='oem-equivalence')
 router.register('employees', EmployeeViewSet, basename='employee')
 router.register('documents', core.DocumentViewSet, basename='document')
 

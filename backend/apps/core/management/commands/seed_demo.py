@@ -2,6 +2,10 @@ import random
 from datetime import timedelta
 from decimal import Decimal
 
+from pathlib import Path
+
+from django.conf import settings
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -88,9 +92,10 @@ class Command(BaseCommand):
         parts = []
         for ref, oem, des, cat, brand, models_, yf, yt, eng, pa, pv in catalog:
             sup = suppliers[2] if cat == 'paint' else random.choice(suppliers[:2])
-            p = Part.objects.create(reference=ref, oem_reference=oem, designation=des, category=cat, brand=brand,
+            # Demo parts carry no OEM reference: real references must come from a verified source (see OEM catalogue).
+            p = Part.objects.create(reference=ref, oem_reference='', designation=des, category=cat, brand=brand,
                                     compatible_models=models_, year_from=yf, year_to=yt, engines=eng,
-                                    compatibility_verified=bool(oem), purchase_price=pa, sale_price=pv, supplier=sup,
+                                    compatibility_verified=False, purchase_price=pa, sale_price=pv, supplier=sup,
                                     quantity=0, min_quantity=random.choice([1, 2, 3]),
                                     location=f'R{random.randint(1, 6)}-E{random.randint(1, 4)}')
             StockMovement.objects.create(part=p, kind='in', quantity=random.choice([0, 1, 2, 4, 6, 10]) or 1, unit_cost=pa,
@@ -162,7 +167,7 @@ class Command(BaseCommand):
                                          status='accepted' if stage > progress.index('waiting_quote') else 'pending')
                 pos = 0
                 for p in random.sample(compatible, min(len(compatible), random.randint(2, 4))):
-                    QuoteLine.objects.create(quote=q, position=pos, line_type='part', part=p, reference=p.oem_reference or p.reference,
+                    QuoteLine.objects.create(quote=q, position=pos, line_type='part', part=p, reference=p.reference,
                                              designation=p.designation, quantity=1, unit_price=p.sale_price,
                                              operation='replace_new' if p.category != 'paint' else '')
                     pos += 1
@@ -234,6 +239,9 @@ class Command(BaseCommand):
                         start_date=entry + timedelta(days=2 + k_i), due_date=entry + timedelta(days=3 + k_i * 2),
                         completed_at=entry + timedelta(days=3 + k_i * 2) if finished else None,
                         hours_spent=Decimal(random.choice([1, 2, 3, 4])) if finished or started else 0)
+
+        for workbook in sorted(Path(settings.BASE_DIR, 'data', 'oem').glob('*.xlsx')):
+            call_command('import_oem', str(workbook), stdout=self.stdout)
 
         self.stdout.write(self.style.SUCCESS(
             f'{Client.objects.count()} clients, {Vehicle.objects.count()} véhicules, {RepairOrder.objects.count()} dossiers, '

@@ -1,6 +1,7 @@
+from django.db.models import Q
 from rest_framework import serializers
 
-from .models import Part, StockMovement, Supplier
+from .models import OemEquivalence, OemReference, Part, StockMovement, Supplier
 
 
 class SupplierSerializer(serializers.ModelSerializer):
@@ -56,4 +57,59 @@ class StockMovementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'quantity': f'Stock insuffisant ({part.quantity} disponible).'})
         if not attrs.get('unit_cost'):
             attrs['unit_cost'] = part.purchase_price
+        return attrs
+
+
+class OemEquivalenceSerializer(serializers.ModelSerializer):
+    kind_label = serializers.CharField(source='get_kind_display', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, default='')
+    oem_label = serializers.CharField(source='oem.__str__', read_only=True)
+    oem_reference = serializers.CharField(source='oem.oem_reference', read_only=True)
+
+    class Meta:
+        model = OemEquivalence
+        fields = '__all__'
+
+    def validate(self, attrs):
+        g = lambda k: attrs.get(k, getattr(self.instance, k, None))
+        attrs['reference'] = (g('reference') or '').strip().upper()
+        if g('verified') and not (g('source_url') and g('verified_at')):
+            raise serializers.ValidationError({'verified': 'Une équivalence vérifiée doit citer sa source et sa date de vérification.'})
+        return attrs
+
+
+class OemReferenceSerializer(serializers.ModelSerializer):
+    status_label = serializers.CharField(source='get_status_display', read_only=True)
+    part_label = serializers.CharField(source='part.__str__', read_only=True, default='')
+    equivalences = OemEquivalenceSerializer(many=True, read_only=True)
+    stock_matches = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OemReference
+        fields = '__all__'
+
+    def get_stock_matches(self, obj):
+        """Stock parts matching this line: explicit link, OEM reference, supersession or a known equivalence."""
+        refs = {r for r in [obj.oem_reference, *obj.superseded_reference.replace(';', ',').split(',')] if r.strip()}
+        refs |= {e.reference for e in obj.equivalences.all()}
+        q = Q(pk=obj.part_id) if obj.part_id else Q(pk__in=[])
+        for r in {r.strip().upper() for r in refs}:
+            q |= Q(oem_reference__iexact=r) | Q(reference__iexact=r) | Q(alt_references__icontains=r)
+        return [{'id': p.id, 'reference': p.reference, 'designation': p.designation, 'quantity': p.quantity,
+                 'sale_price': p.sale_price, 'condition': p.get_condition_display()}
+                for p in Part.objects.filter(q).distinct()[:5]]
+
+    def validate(self, attrs):
+        g = lambda k: attrs.get(k, getattr(self.instance, k, None))
+        oem = (g('oem_reference') or '').strip().upper()
+        attrs['oem_reference'] = oem
+        status = g('status') or 'unknown'
+        if not oem and status != 'unknown':
+            raise serializers.ValidationError({'status': 'Sans référence OEM, le statut reste « Inconnue ». Ne jamais déduire une référence.'})
+        if oem and status == 'unknown':
+            attrs['status'] = status = 'to_verify'
+        if status == 'confirmed' and not (g('source_url') and g('verified_at')):
+            raise serializers.ValidationError({'status': 'Une référence confirmée doit citer sa source et sa date de vérification.'})
+        if g('compatibility_confirmed') and status != 'confirmed':
+            raise serializers.ValidationError({'compatibility_confirmed': 'La compatibilité ne peut être confirmée que pour une référence confirmée.'})
         return attrs

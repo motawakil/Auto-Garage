@@ -94,3 +94,72 @@ class StockMovement(models.Model):
             super().save(*args, **kwargs)
             if is_new:
                 Part.objects.filter(pk=self.part_id).update(quantity=F('quantity') + self.signed_quantity)
+
+
+class OemReference(TimeStampedModel):
+    """
+    One line of the vehicle OEM catalogue (brand / model / year / engine → part designation).
+    A reference is never invented: lines start as `unknown` and are confirmed only with a traceable source.
+    """
+    STATUS_CHOICES = [
+        ('unknown', 'Inconnue — à rechercher'),
+        ('to_verify', 'À vérifier'),
+        ('confirmed', 'Confirmée constructeur'),
+    ]
+
+    brand = models.CharField(max_length=60)
+    model = models.CharField(max_length=80)
+    year = models.PositiveIntegerField(null=True, blank=True)
+    phase = models.CharField(max_length=120, blank=True)
+    engine = models.CharField('motorisation', max_length=80, blank=True)
+    family = models.CharField('famille', max_length=80)
+    designation = models.CharField('désignation pièce', max_length=200)
+    oem_reference = models.CharField('référence OEM', max_length=60, blank=True, db_index=True)
+    superseded_reference = models.CharField('référence remplacée / supersession', max_length=120, blank=True)
+    position = models.CharField('côté / position', max_length=80, blank=True)
+    variant = models.CharField('variante / équipement', max_length=160, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='unknown')
+    compatibility_confirmed = models.BooleanField(default=False)
+    price_oem = models.DecimalField('prix OEM Maroc', max_digits=12, decimal_places=2, null=True, blank=True)
+    price_aftermarket = models.DecimalField('prix adaptable Maroc', max_digits=12, decimal_places=2, null=True, blank=True)
+    price_used = models.DecimalField('prix occasion Maroc', max_digits=12, decimal_places=2, null=True, blank=True)
+    source_market = models.CharField('marché / devise source', max_length=80, blank=True)
+    source_url = models.CharField('source / URL', max_length=500, blank=True)
+    verified_at = models.DateField('date de vérification', null=True, blank=True)
+    notes = models.TextField(blank=True)
+    part = models.ForeignKey(Part, null=True, blank=True, on_delete=models.SET_NULL, related_name='oem_lines',
+                             help_text='Pièce du stock correspondant à cette ligne.')
+
+    class Meta:
+        ordering = ['brand', 'model', 'family', 'designation']
+        unique_together = [('brand', 'model', 'year', 'engine', 'designation')]
+
+    def __str__(self):
+        return f'{self.brand} {self.model} · {self.designation}'
+
+
+class OemEquivalence(TimeStampedModel):
+    """Equivalent reference for an OEM line: supersession, aftermarket brand or used part."""
+    KIND_CHOICES = [
+        ('supersession', 'Supersession constructeur'),
+        ('aftermarket', 'Adaptable (équipementier)'),
+        ('used', 'Occasion'),
+    ]
+
+    oem = models.ForeignKey(OemReference, on_delete=models.CASCADE, related_name='equivalences')
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default='aftermarket')
+    manufacturer = models.CharField('fabricant', max_length=80, blank=True)
+    reference = models.CharField('référence équivalente', max_length=80, db_index=True)
+    price = models.DecimalField('prix Maroc', max_digits=12, decimal_places=2, null=True, blank=True)
+    supplier = models.ForeignKey(Supplier, null=True, blank=True, on_delete=models.SET_NULL)
+    verified = models.BooleanField(default=False)
+    source_url = models.CharField('source / URL', max_length=500, blank=True)
+    verified_at = models.DateField(null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['oem', 'kind', 'manufacturer']
+        unique_together = [('oem', 'reference')]
+
+    def __str__(self):
+        return f'{self.manufacturer} {self.reference}'.strip()

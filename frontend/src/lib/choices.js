@@ -85,3 +85,6 @@ export const DOCUMENT_KINDS = make([
   ['invoice', 'Facture'], ['receipt', 'Justificatif de paiement'], ['other', 'Autre'],
 ])
 export const CAR_BRANDS = ['Renault', 'Dacia', 'Peugeot', 'Citroën', 'Opel', 'Mercedes-Benz', 'Volkswagen', 'Audi', 'SEAT', 'Toyota', 'Hyundai', 'Kia', 'Fiat', 'Ford', 'BMW', 'Skoda']
+
+export const OEM_STATUSES = make([['unknown', 'Inconnue — à rechercher'], ['to_verify', 'À vérifier', 'amber'], ['confirmed', 'Confirmée constructeur', 'green']])
+export const OEM_EQUIVALENCE_KINDS = make([['supersession', 'Supersession constructeur', 'violet'], ['aftermarket', 'Adaptable (équipementier)', 'blue'], ['used', 'Occasion', 'amber']])

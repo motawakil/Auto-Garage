@@ -56,4 +56,6 @@ export const resources = {
   suppliers: createResource('suppliers'),
   employees: createResource('employees'),
   documents: createResource('documents'),
+  oemReferences: createResource('oem-references'),
+  oemEquivalences: createResource('oem-equivalences'),
 }

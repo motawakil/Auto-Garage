@@ -5,6 +5,9 @@ devis, factures, paiements, stock, fournisseurs, équipe, notifications et rappo
 
 MVP CRUD sans authentification, sans IA et sans intégration externe.
 
+> **Contributeurs et agents IA** : lisez d'abord [AGENTS.md](AGENTS.md) — état du projet, règles métier,
+> feuille de route IA. Il doit être mis à jour à chaque fonctionnalité livrée.
+
 ## Stack
 
 | Couche | Technologies |
@@ -20,7 +23,7 @@ cd backend
 cp .env.example .env                       # puis définir DJANGO_SECRET_KEY
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python manage.py migrate
-.venv/bin/python manage.py seed_demo --reset   # données de démonstration
+.venv/bin/python manage.py seed_demo --reset   # données de démo + import de backend/data/oem/*.xlsx
 .venv/bin/python manage.py runserver 0.0.0.0:8010
 
 # Frontend (port 5180, proxy /api et /media vers le backend)
@@ -56,7 +59,11 @@ frontend/src/
 - **Paiements** : un chèque n'est compté qu'une fois **encaissé** ; remboursement avec motif obligatoire ;
   pas de suppression (annulation motivée, historisée). Résumé financier par dossier sans double comptage.
 - **Stock** : mouvements immuables, sorties rattachées à un dossier, contrôle de stock insuffisant, alertes de rupture.
-- **Compatibilité** : recherche marque / modèle / année / motorisation ; références non vérifiées signalées.
+- **Compatibilité** : recherche marque / modèle / année / motorisation dans le stock et le catalogue OEM ;
+  références non vérifiées signalées.
+- **Catalogue OEM & équivalences** : import du modèle Excel `Base_OEM_*.xlsx`
+  (`python manage.py import_oem <fichier>` ou bouton « Importer un fichier Excel »). Une référence n'est jamais
+  inventée : statuts Inconnue → À vérifier → Confirmée (source + date obligatoires).
 - **Assurance** : parcours en 8 étapes (Précédent / Continuer), envoi officiel uniquement après validation humaine.
 - **Notifications** : calculées en continu (retards, expertises, chèques, impayés, stock bas…).
 
