@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: oklch(0.975 0.002 286);
+  --foreground: oklch(0.2 0.006 286);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.006 286);
+  --muted: oklch(0.955 0.003 286);
+  --muted-foreground: oklch(0.52 0.012 286);
+  --border: oklch(0.915 0.004 286);
+  --input: oklch(0.89 0.005 286);
+  --ring: oklch(0.6 0.22 25);
+  --primary: oklch(0.577 0.225 25);
+  --primary-hover: oklch(0.52 0.215 25);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-soft: oklch(0.96 0.03 20);
+  --primary-soft-foreground: oklch(0.5 0.2 25);
+  --sidebar: oklch(0.155 0.006 286);
+  --sidebar-elevated: oklch(0.205 0.007 286);
+  --sidebar-foreground: oklch(0.72 0.01 286);
+  --sidebar-muted: oklch(0.5 0.01 286);
+  --sidebar-border: oklch(0.25 0.008 286);
+  --part-row: oklch(0.975 0.06 98);
+  --part-row-strong: oklch(0.93 0.1 96);
+  --part-row-foreground: oklch(0.42 0.09 75);
+  --shadow-color: 240 6% 10%;
+  --chart-1: #dc2626;
+  --chart-2: #3b5bdb;
+}
+
+.dark {
+  --background: oklch(0.145 0.004 286);
+  --foreground: oklch(0.96 0.003 286);
+  --card: oklch(0.185 0.005 286);
+  --card-foreground: oklch(0.96 0.003 286);
+  --muted: oklch(0.225 0.006 286);
+  --muted-foreground: oklch(0.68 0.012 286);
+  --border: oklch(0.27 0.007 286);
+  --input: oklch(0.32 0.008 286);
+  --primary-soft: oklch(0.28 0.08 22);
+  --primary-soft-foreground: oklch(0.8 0.13 22);
+  --sidebar: oklch(0.12 0.004 286);
+  --sidebar-elevated: oklch(0.19 0.006 286);
+  --sidebar-border: oklch(0.22 0.006 286);
+  --part-row: oklch(0.27 0.05 90);
+  --part-row-strong: oklch(0.33 0.07 90);
+  --part-row-foreground: oklch(0.88 0.1 95);
+  --shadow-color: 0 0% 0%;
+  --chart-1: #ef4444;
+  --chart-2: #5c7cfa;
+}
+
+@theme inline {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-elevated: var(--sidebar-elevated);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-part-row: var(--part-row);
+  --color-part-row-strong: var(--part-row-strong);
+  --color-part-row-foreground: var(--part-row-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --shadow-card: 0 1px 2px hsl(var(--shadow-color) / 0.04), 0 1px 3px hsl(var(--shadow-color) / 0.04);
+  --shadow-pop: 0 10px 38px -10px hsl(var(--shadow-color) / 0.25), 0 10px 20px -15px hsl(var(--shadow-color) / 0.2);
+  --animate-in: fade-in 160ms ease-out;
+  --animate-slide: slide-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-pop: pop-in 140ms ease-out;
+}
+
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slide-in { from { opacity: 0; transform: translateX(16px) } to { opacity: 1; transform: none } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98) } to { opacity: 1; transform: none } }
+
+@layer base {
+  * { border-color: var(--border); }
+  html { -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--primary-soft); color: var(--primary-soft-foreground); }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  input[type="number"]::-webkit-inner-spin-button { opacity: 0.4; }
+}
+
+@utility tabular { font-variant-numeric: tabular-nums; }
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}

@@ -1,0 +1,32 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python / Django
+backend/.venv/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+backend/media/
+backend/staticfiles/
+*.log
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+node_modules/
+npm-debug.log*
+
+# Editors & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local tooling
+.claude/
