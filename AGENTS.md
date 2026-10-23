@@ -28,6 +28,8 @@ backend/apps/<domaine>/      models.py · serializers.py · views.py · services
   core/                      paramètres garage, documents, journal ActivityLog, dashboard, recherche, notifications, exports
   clients/  repairs/  billing/  inventory/  staff/
 backend/data/oem/            fichiers Excel Base_OEM_*.xlsx importés par `seed_demo` / `import_oem`
+backend/data/demo/           demo_data.json — jeu de démonstration chargé par `loaddata` (données fictives)
+docs/GUIDE_WINDOWS.md        installation pas à pas sous Windows
 frontend/src/
   components/ui/             primitives (Button, Input, Badge…) — pas de logique métier
   components/common/         DataTable, Panel (panneau latéral docké), ResourceForm (formulaire par schéma), CrudPage
@@ -131,7 +133,9 @@ Ordre recommandé (cahier des charges §20) :
 
 ## 7. Comment contribuer (humains et agents)
 
-1. Lire ce fichier et le [README.md](README.md) ; lancer `seed_demo --reset` pour disposer de données.
+1. Lire ce fichier et le [README.md](README.md) ; charger la démo avec `loaddata data/demo/demo_data.json`
+   (ou `seed_demo --reset`). Si un modèle change, régénérer le fichier : `seed_demo --reset` puis
+   `dumpdata core clients staff inventory repairs billing --indent 1 -o data/demo/demo_data.json`.
 2. Respecter les sections 2 et 3. En cas de doute sur une règle métier, **demander** plutôt qu'inventer.
 3. Vérifier : `python manage.py check`, `npx vite build`, et tester la page dans le navigateur (desktop + mobile).
 4. Mettre à jour **ce fichier** (sections 4 et 6, journal ci-dessous) et, si besoin, le README.
@@ -143,3 +147,4 @@ Ordre recommandé (cahier des charges §20) :
 |---|---|---|
 | v1.0.0 | 2026-10-23 | MVP CRUD complet : clients, véhicules, dossiers, assurance 8 étapes, devis versionnés, factures, paiements, stock, compatibilité, fournisseurs, équipe, notifications, rapports, paramètres. |
 | v1.1.0 | 2026-10-23 | Catalogue OEM véhicule et équivalences : modèles `OemReference` / `OemEquivalence`, import Excel (`import_oem` + bouton), onglets Catalogue OEM et Équivalences, correspondances avec le stock. Import de la base Peugeot 208 2023 1.5 BlueHDi (114 lignes à compléter). Retrait des références OEM fictives des données de démo. Création de ce fichier `AGENTS.md`. |
+| v1.1.1 | 2026-10-23 | Jeu de démonstration versionné (`backend/data/demo/demo_data.json`, chargé par `loaddata`), variable `DJANGO_DB_PATH`, guide Windows `docs/GUIDE_WINDOWS.md`. |

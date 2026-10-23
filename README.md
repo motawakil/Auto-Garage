@@ -23,7 +23,8 @@ cd backend
 cp .env.example .env                       # puis définir DJANGO_SECRET_KEY
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python manage.py migrate
-.venv/bin/python manage.py seed_demo --reset   # données de démo + import de backend/data/oem/*.xlsx
+.venv/bin/python manage.py loaddata data/demo/demo_data.json   # données de démo fournies
+# ou : .venv/bin/python manage.py seed_demo --reset   # régénère la démo + importe backend/data/oem/*.xlsx
 .venv/bin/python manage.py runserver 0.0.0.0:8010
 
 # Frontend (port 5180, proxy /api et /media vers le backend)
@@ -34,6 +35,8 @@ npm run dev
 
 Ouvrir http://localhost:5180 — depuis un téléphone du même réseau : `http://<ip-du-pc>:5180`.
 `BACKEND_URL` permet de pointer le proxy Vite vers un autre backend.
+
+Guide pas à pas pour Windows : [docs/GUIDE_WINDOWS.md](docs/GUIDE_WINDOWS.md).
 
 ## Organisation
 
