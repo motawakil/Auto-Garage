@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/common/page-header'
 import { StatCard } from '@/components/common/stat-card'
 import { StatusBadge } from '@/components/common/status-badge'
 import { useNotificationsCount } from '@/components/layout/sidebar'
+import { useAuth } from '@/context/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -27,6 +28,7 @@ function greeting() {
 export default function Dashboard() {
   const { data, isLoading } = useDashboard()
   const { data: notifs = [] } = useNotificationsCount()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const c = data?.counts ?? {}
   const f = data?.finance ?? {}
@@ -35,7 +37,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`${greeting()}, Abdelilah`}
+        title={`${greeting()}${user?.first_name ? `, ${user.first_name}` : ''}`}
         description={new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}
         actions={
           <>

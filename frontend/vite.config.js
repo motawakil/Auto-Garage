@@ -9,9 +9,9 @@ export default defineConfig({
   server: {
     port: 5180,
     host: true,
+    // Keep the browser's Host header so Django's CSRF origin check sees the real origin.
     proxy: {
-      '/api': process.env.BACKEND_URL || 'http://127.0.0.1:8010',
-      '/media': process.env.BACKEND_URL || 'http://127.0.0.1:8010',
+      '/api': { target: process.env.BACKEND_URL || 'http://127.0.0.1:8010', changeOrigin: false },
     },
   },
 })

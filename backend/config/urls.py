@@ -1,5 +1,3 @@
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
@@ -33,11 +31,13 @@ router.register('documents', core.DocumentViewSet, basename='document')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/auth/', include('apps.accounts.urls')),
     path('api/', include(router.urls)),
-    path('api/settings/', core.garage_settings),
-    path('api/dashboard/', core.dashboard),
-    path('api/notifications/', core.notifications),
-    path('api/search/', core.global_search),
-    path('api/reports/', core.reports),
-    path('api/exports/<str:name>.csv', core.export_csv),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    path('api/settings/', core.GarageSettingsView.as_view()),
+    path('api/dashboard/', core.DashboardView.as_view()),
+    path('api/notifications/', core.NotificationsView.as_view()),
+    path('api/search/', core.SearchView.as_view()),
+    path('api/reports/', core.ReportsView.as_view()),
+    path('api/exports/<str:name>.csv', core.ExportView.as_view()),
+]
+# Uploaded files are never served publicly: see DocumentViewSet.download / PaymentViewSet.receipt_file.

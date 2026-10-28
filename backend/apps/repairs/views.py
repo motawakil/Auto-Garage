@@ -3,13 +3,23 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.core.tenancy import CompanyScopedViewMixin
 from apps.billing.services import repair_order_finance
 from apps.core.models import ActivityLog
+from apps.accounts.permissions import HasRolePermission
 from .models import Expert, InsuranceCompany, RepairOrder, RepairTask
 from .serializers import ExpertSerializer, InsuranceCompanySerializer, RepairOrderSerializer, RepairTaskSerializer
 
 
-class InsuranceCompanyViewSet(viewsets.ModelViewSet):
+REFERENTIAL_RBAC = {'create': 'referentials.edit', 'update': 'referentials.edit',
+                    'partial_update': 'referentials.edit', 'destroy': 'referentials.edit'}
+
+
+class InsuranceCompanyViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
+    # Readable by everyone (needed in dossiers); managed from Paramètres by admins only.
+    permission_classes = [HasRolePermission]
+    rbac_open_actions = ('list', 'retrieve')
+    rbac_action_permissions = REFERENTIAL_RBAC
     ordering = ['name']
     serializer_class = InsuranceCompanySerializer
     search_fields = ['name', 'phone', 'email']
@@ -18,7 +28,10 @@ class InsuranceCompanyViewSet(viewsets.ModelViewSet):
         return InsuranceCompany.objects.annotate(repairs_count=Count('repair_orders'))
 
 
-class ExpertViewSet(viewsets.ModelViewSet):
+class ExpertViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
+    permission_classes = [HasRolePermission]
+    rbac_open_actions = ('list', 'retrieve')
+    rbac_action_permissions = REFERENTIAL_RBAC
     ordering = ['last_name']
     serializer_class = ExpertSerializer
     search_fields = ['first_name', 'last_name', 'firm', 'phone']
@@ -28,7 +41,7 @@ class ExpertViewSet(viewsets.ModelViewSet):
         return Expert.objects.prefetch_related('companies').annotate(repairs_count=Count('repair_orders'))
 
 
-class RepairOrderViewSet(viewsets.ModelViewSet):
+class RepairOrderViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     ordering = ['-entry_date', '-id']
     serializer_class = RepairOrderSerializer
     search_fields = ['number', 'client__last_name', 'client__first_name', 'client__company_name', 'client__phone',
@@ -69,16 +82,16 @@ class RepairOrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True)
     def history(self, request, pk=None):
-        rows = ActivityLog.objects.filter(repair_order_id=pk)[:100]
+        rows = ActivityLog.objects.filter(company=request.company, repair_order_id=pk)[:100]
         return Response([{'id': h.id, 'date': h.created_at, 'action': h.action, 'message': h.message} for h in rows])
 
     @action(detail=False)
     def statuses(self, request):
-        counts = dict(RepairOrder.objects.values_list('status').annotate(c=Count('id')))
+        counts = dict(RepairOrder.objects.filter(company=request.company).order_by().values_list('status').annotate(c=Count('id')))
         return Response([{'value': v, 'label': l, 'count': counts.get(v, 0)} for v, l in RepairOrder.STATUS_CHOICES])
 
 
-class RepairTaskViewSet(viewsets.ModelViewSet):
+class RepairTaskViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = RepairTaskSerializer
     filterset_fields = ['repair_order', 'employee', 'status', 'kind']
     search_fields = ['title', 'repair_order__number', 'employee__first_name', 'employee__last_name']

@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom'
 
 import { EmptyState } from '@/components/common/empty-state'
 import { AppLayout } from '@/components/layout/app-layout'
+import Login from '@/features/auth/login'
 import ClientDetail from '@/features/clients/client-detail'
 import Clients from '@/features/clients/clients'
 import Compatibility from '@/features/compatibility/compatibility'
@@ -21,12 +22,14 @@ import Stock from '@/features/stock/stock'
 import Suppliers from '@/features/suppliers/suppliers'
 import Team from '@/features/team/team'
 import Vehicles from '@/features/vehicles/vehicles'
+import { ProtectedRoute, PublicOnlyRoute } from '@/routes/protected-route'
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/imprimer/:kind/:id" element={<PrintDocument />} />
-      <Route element={<AppLayout />}>
+      <Route path="/connexion" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+      <Route path="/imprimer/:kind/:id" element={<ProtectedRoute><PrintDocument /></ProtectedRoute>} />
+      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="clients" element={<Clients />} />
         <Route path="clients/:id" element={<ClientDetail />} />
@@ -44,7 +47,7 @@ export default function App() {
         <Route path="equipe" element={<Team />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="rapports" element={<Reports />} />
-        <Route path="parametres" element={<Settings />} />
+        <Route path="parametres" element={<ProtectedRoute permission="settings.view"><Settings /></ProtectedRoute>} />
         <Route path="*" element={<EmptyState title="Page introuvable" description="Cette page n'existe pas ou a été déplacée." />} />
       </Route>
     </Routes>

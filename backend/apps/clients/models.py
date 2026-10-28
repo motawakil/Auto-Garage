@@ -49,7 +49,7 @@ class Vehicle(TimeStampedModel):
     year = models.PositiveIntegerField(null=True, blank=True)
     engine = models.CharField('motorisation', max_length=80, blank=True)
     fuel = models.CharField(max_length=20, choices=FUEL_CHOICES, blank=True)
-    plate = models.CharField('immatriculation', max_length=30, unique=True)
+    plate = models.CharField('immatriculation', max_length=30)
     vin = models.CharField('VIN', max_length=17, blank=True)
     color = models.CharField(max_length=40, blank=True)
     mileage = models.PositiveIntegerField(null=True, blank=True)
@@ -57,6 +57,7 @@ class Vehicle(TimeStampedModel):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [models.UniqueConstraint(fields=['company', 'plate'], name='unique_plate_per_company')]
 
     def __str__(self):
         return f'{self.brand} {self.model} · {self.plate}'

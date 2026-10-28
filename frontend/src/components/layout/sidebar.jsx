@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronsLeft, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
+import { useAuth } from '@/context/auth-provider'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { LogoMark } from './logo'
@@ -13,6 +14,8 @@ export function useNotificationsCount() {
 
 export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const { data: notifs } = useNotificationsCount()
+  const { can, company, roleLabel } = useAuth()
+  const sections = NAV.map((s) => ({ ...s, items: s.items.filter((i) => can(i.permission)) })).filter((s) => s.items.length)
   const counts = { notifications: notifs?.filter((n) => n.priority === 'high').length }
 
   return (
@@ -38,7 +41,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
         </div>
 
         <nav className="scrollbar-thin relative flex-1 overflow-y-auto px-3 pb-4 pt-2">
-          {NAV.map((section) => (
+          {sections.map((section) => (
             <div key={section.group} className="mb-4">
               <p className={cn('mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted/80', collapsed && 'lg:hidden')}>
                 {section.group}
@@ -83,10 +86,12 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
 
         <div className="relative border-t border-sidebar-border p-3">
           <div className={cn('flex items-center gap-3 rounded-xl bg-sidebar-elevated/70 p-2.5', collapsed && 'lg:hidden')}>
-            <div className="flex size-8 items-center justify-center rounded-lg bg-white/5 text-[11px] font-semibold text-white">MVP</div>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-[11px] font-semibold text-white">
+              {company?.name?.slice(0, 2).toUpperCase()}
+            </div>
             <div className="min-w-0 text-xs leading-tight">
-              <p className="font-medium text-white">Manager 2027</p>
-              <p className="truncate text-sidebar-muted">Version 0.1 · Casablanca</p>
+              <p className="truncate font-medium text-white">{company?.name}</p>
+              <p className="truncate text-sidebar-muted">{roleLabel}{company?.city && ` · ${company.city}`}</p>
             </div>
           </div>
           <button

@@ -3,7 +3,7 @@
 Gestion centralisée du garage : clients, véhicules, dossiers de réparation, assurances & expertises,
 devis, factures, paiements, stock, fournisseurs, équipe, notifications et rapports.
 
-MVP CRUD sans authentification, sans IA et sans intégration externe.
+Application multi-entreprise avec authentification sécurisée et rôles (admin / utilisateur), sans IA ni intégration externe.
 
 > **Contributeurs et agents IA** : lisez d'abord [AGENTS.md](AGENTS.md) — état du projet, règles métier,
 > feuille de route IA. Il doit être mis à jour à chaque fonctionnalité livrée.
@@ -23,7 +23,7 @@ cd backend
 cp .env.example .env                       # puis définir DJANGO_SECRET_KEY
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python manage.py migrate
-.venv/bin/python manage.py loaddata data/demo/demo_data.json   # données de démo fournies
+.venv/bin/python manage.py loaddata data/demo/demo_data.json   # données de démo fournies (2 entreprises, 3 comptes)
 # ou : .venv/bin/python manage.py seed_demo --reset   # régénère la démo + importe backend/data/oem/*.xlsx
 .venv/bin/python manage.py runserver 0.0.0.0:8010
 
@@ -35,6 +35,26 @@ npm run dev
 
 Ouvrir http://localhost:5180 — depuis un téléphone du même réseau : `http://<ip-du-pc>:5180`.
 `BACKEND_URL` permet de pointer le proxy Vite vers un autre backend.
+
+### Comptes de démonstration (développement uniquement)
+
+| Entreprise | E-mail | Mot de passe | Rôle |
+|---|---|---|---|
+| Garage El Jaouhari | `admin@eljaouhari.ma` | `Demo-Admin-2026!` | Administrateur |
+| Garage El Jaouhari | `atelier@eljaouhari.ma` | `Demo-Atelier-2026!` | Utilisateur (sans paramètres) |
+| Garage Atlas Démo | `admin@atlas-demo.ma` | `Demo-Admin-2026!` | Administrateur (autre entreprise, pour vérifier le cloisonnement) |
+
+Créer une vraie entreprise et ses comptes (le mot de passe est demandé de façon interactive) :
+
+```bash
+.venv/bin/python manage.py create_company "Garage X" --admin-email admin@garage-x.ma --city Rabat
+.venv/bin/python manage.py create_login --company garage-x --email atelier@garage-x.ma --role user
+```
+
+Tests : `.venv/bin/python manage.py test apps`.
+
+> **Mise à jour depuis une version ≤ 1.1** : les migrations ont été réinitialisées (passage au multi-entreprise).
+> Supprimer `backend/db.sqlite3`, puis `migrate` et `loaddata`.
 
 Guide pas à pas pour Windows : [docs/GUIDE_WINDOWS.md](docs/GUIDE_WINDOWS.md).
 

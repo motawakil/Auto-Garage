@@ -2,11 +2,12 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import viewsets
 
+from apps.core.tenancy import CompanyScopedViewMixin
 from .models import Employee
 from .serializers import EmployeeSerializer
 
 
-class EmployeeViewSet(viewsets.ModelViewSet):
+class EmployeeViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     ordering = ['first_name']
     serializer_class = EmployeeSerializer
     search_fields = ['first_name', 'last_name', 'phone']

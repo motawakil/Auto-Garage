@@ -53,8 +53,8 @@ export function DocumentsGallery({ params = {}, defaults = {}, withLinks = false
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {rows.map((d) => (
               <Card key={d.id} className="group overflow-hidden">
-                <a href={d.file} target="_blank" rel="noreferrer" className="relative block aspect-[4/3] bg-muted">
-                  {d.is_image ? <img src={d.file} alt={d.title} className="size-full object-cover" /> : (
+                <a href={d.file_url} target="_blank" rel="noreferrer" className="relative block aspect-[4/3] bg-muted">
+                  {d.is_image ? <img src={d.file_url} alt={d.title} className="size-full object-cover" /> : (
                     <div className="flex size-full items-center justify-center"><FileText className="size-10 text-muted-foreground" /></div>
                   )}
                   <Badge className="absolute left-2 top-2 bg-card/90 backdrop-blur">{labelOf(DOCUMENT_KINDS, d.kind)}</Badge>

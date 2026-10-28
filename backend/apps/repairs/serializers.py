@@ -1,10 +1,11 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.core.tenancy import CompanyModelSerializer
 from .models import Expert, InsuranceCompany, RepairOrder, RepairTask
 
 
-class InsuranceCompanySerializer(serializers.ModelSerializer):
+class InsuranceCompanySerializer(CompanyModelSerializer):
     repairs_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
@@ -12,7 +13,7 @@ class InsuranceCompanySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class ExpertSerializer(serializers.ModelSerializer):
+class ExpertSerializer(CompanyModelSerializer):
     full_name = serializers.CharField(read_only=True)
     company_names = serializers.SerializerMethodField()
     repairs_count = serializers.IntegerField(read_only=True, default=0)
@@ -28,9 +29,10 @@ class ExpertSerializer(serializers.ModelSerializer):
         last = attrs.get('last_name', getattr(self.instance, 'last_name', ''))
         first = attrs.get('first_name', getattr(self.instance, 'first_name', ''))
         phone = attrs.get('phone', getattr(self.instance, 'phone', ''))
-        qs = Expert.objects.filter(last_name__iexact=last, first_name__iexact=first)
+        scoped = Expert.objects.filter(company=self._company())
+        qs = scoped.filter(last_name__iexact=last, first_name__iexact=first)
         if phone:
-            qs = qs | Expert.objects.filter(phone=phone)
+            qs = qs | scoped.filter(phone=phone)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
@@ -38,7 +40,7 @@ class ExpertSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class RepairTaskSerializer(serializers.ModelSerializer):
+class RepairTaskSerializer(CompanyModelSerializer):
     employee_name = serializers.CharField(source='employee.full_name', read_only=True, default='')
     employee_color = serializers.CharField(source='employee.color', read_only=True, default='')
     status_label = serializers.CharField(source='get_status_display', read_only=True)
@@ -60,7 +62,7 @@ class RepairTaskSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class RepairOrderSerializer(serializers.ModelSerializer):
+class RepairOrderSerializer(CompanyModelSerializer):
     client_name = serializers.CharField(source='client.display_name', read_only=True)
     client_phone = serializers.CharField(source='client.phone', read_only=True)
     vehicle_label = serializers.CharField(source='vehicle.__str__', read_only=True)

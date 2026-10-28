@@ -5,12 +5,19 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
 
 import App from './App'
+import { AuthProvider } from './context/auth-provider'
 import { ConfirmDialogProvider } from './context/confirm-dialog-provider'
 import { ThemeProvider } from './context/theme-provider'
 import './index.css'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 20_000, refetchOnWindowFocus: false, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      staleTime: 20_000,
+      refetchOnWindowFocus: false,
+      retry: (count, error) => ![401, 403, 404].includes(error?.response?.status) && count < 1,
+    },
+  },
 })
 
 createRoot(document.getElementById('root')).render(
@@ -19,7 +26,9 @@ createRoot(document.getElementById('root')).render(
       <ThemeProvider>
         <ConfirmDialogProvider>
           <BrowserRouter>
-            <App />
+            <AuthProvider>
+              <App />
+            </AuthProvider>
           </BrowserRouter>
           <Toaster position="bottom-right" richColors closeButton toastOptions={{ className: 'font-sans' }} />
         </ConfirmDialogProvider>

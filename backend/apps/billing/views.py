@@ -5,13 +5,14 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from apps.core.tenancy import CompanyScopedViewMixin
 from apps.core.models import ActivityLog
 from .models import Invoice, Payment, Quote
 from .serializers import InvoiceSerializer, PaymentSerializer, QuoteSerializer
 from .services import invoice_from_quote, revise_quote
 
 
-class QuoteViewSet(viewsets.ModelViewSet):
+class QuoteViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = QuoteSerializer
     filterset_fields = ['status', 'kind', 'repair_order', 'repair_order__client']
     search_fields = ['number', 'repair_order__number', 'repair_order__client__last_name',
@@ -23,7 +24,8 @@ class QuoteViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get('latest') == '1':
             # Only the latest version of each quote number in list views.
             from django.db.models import Max, OuterRef, Subquery
-            latest = Quote.objects.filter(number=OuterRef('number')).order_by('-version').values('version')[:1]
+            latest = (Quote.objects.filter(company=OuterRef('company'), number=OuterRef('number'))
+                      .order_by('-version').values('version')[:1])
             qs = qs.filter(version=Subquery(latest))
         return qs
 
@@ -47,7 +49,7 @@ class QuoteViewSet(viewsets.ModelViewSet):
         return Response(InvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
 
 
-class InvoiceViewSet(viewsets.ModelViewSet):
+class InvoiceViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = InvoiceSerializer
     filterset_fields = ['status', 'repair_order', 'repair_order__client']
     search_fields = ['number', 'repair_order__number', 'repair_order__client__last_name',
@@ -61,7 +63,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        for inv in Invoice.objects.filter(status__in=['issued', 'partial', 'overdue']):
+        for inv in Invoice.objects.filter(company=request.company, status__in=['issued', 'partial', 'overdue']):
             inv.refresh_status()
         return super().list(request, *args, **kwargs)
 
@@ -71,7 +73,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-class PaymentViewSet(viewsets.ModelViewSet):
+class PaymentViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = PaymentSerializer
     filterset_fields = ['client', 'repair_order', 'invoice', 'method', 'origin', 'kind', 'cheque_status', 'is_cancelled']
     search_fields = ['reference', 'bank', 'client__last_name', 'client__company_name', 'repair_order__number', 'invoice__number']
@@ -94,6 +96,11 @@ class PaymentViewSet(viewsets.ModelViewSet):
         p = serializer.save()
         self._sync(p, 'updated', f'Paiement {p.number} modifié'
                    + (f' — chèque {p.get_cheque_status_display().lower()}' if p.method == 'cheque' else ''))
+
+    @action(detail=True, url_path='receipt')
+    def receipt_file(self, request, pk=None):
+        from apps.core.views import serve_file
+        return serve_file(self.get_object().receipt)
 
     def perform_destroy(self, instance):
         raise ValidationError('Les paiements ne se suppriment pas : annulez-les ou enregistrez un remboursement.')

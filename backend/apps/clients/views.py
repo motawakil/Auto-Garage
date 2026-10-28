@@ -4,6 +4,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.core.tenancy import CompanyScopedViewMixin
 from apps.billing.services import client_finance
 from apps.core.models import ActivityLog
 from .models import Client, Vehicle
@@ -12,7 +13,7 @@ from .serializers import ClientSerializer, VehicleSerializer
 ACTIVE_EXCLUDED = ['done', 'delivered', 'closed']
 
 
-class ClientViewSet(viewsets.ModelViewSet):
+class ClientViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     ordering = ['-created_at']
     serializer_class = ClientSerializer
     search_fields = ['first_name', 'last_name', 'company_name', 'phone', 'email', 'cin', 'vehicles__plate', 'repair_orders__number']
@@ -47,7 +48,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     @action(detail=True)
     def overview(self, request, pk=None):
         client = self.get_object()
-        history = ActivityLog.objects.filter(client_id=client.pk)[:50]
+        history = ActivityLog.objects.filter(company=request.company, client_id=client.pk)[:50]
         return Response({
             'finance': client_finance(client),
             'history': [{'id': h.id, 'date': h.created_at, 'action': h.action, 'message': h.message,
@@ -63,11 +64,11 @@ class ClientViewSet(viewsets.ModelViewSet):
             q |= Q(phone=phone) | Q(phone_secondary=phone)
         if len(name) >= 3:
             q |= Q(last_name__iexact=name) | Q(company_name__iexact=name)
-        rows = Client.objects.filter(q)[:5]
+        rows = Client.objects.filter(q, company=request.company)[:5]
         return Response([{'id': c.id, 'display_name': c.display_name, 'phone': c.phone, 'code': c.code} for c in rows])
 
 
-class VehicleViewSet(viewsets.ModelViewSet):
+class VehicleViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     ordering = ['-created_at']
     serializer_class = VehicleSerializer
     search_fields = ['plate', 'vin', 'brand', 'model', 'client__last_name', 'client__first_name', 'client__company_name']

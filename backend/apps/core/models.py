@@ -1,7 +1,12 @@
 from django.db import models
+from django.utils.deconstruct import deconstructible
+
+from apps.accounts.context import get_current_user
+from apps.accounts.models import Company, CompanyScopedModel
 
 
-class TimeStampedModel(models.Model):
+class TimeStampedModel(CompanyScopedModel):
+    """Base of every business record: owned by one company, timestamped."""
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -10,8 +15,9 @@ class TimeStampedModel(models.Model):
 
 
 class GarageSettings(models.Model):
-    """Singleton holding the garage identity used on quotes and invoices."""
-    name = models.CharField(max_length=120, default='Garage El Jaouhari')
+    """One per company: the garage identity used on quotes and invoices."""
+    company = models.OneToOneField(Company, on_delete=models.CASCADE, related_name='garage_settings')
+    name = models.CharField(max_length=120, default='Mon garage')
     slogan = models.CharField(max_length=200, blank=True, default='Mécanique · Carrosserie · Peinture')
     address = models.CharField(max_length=255, blank=True)
     city = models.CharField(max_length=80, blank=True, default='Casablanca')
@@ -30,18 +36,19 @@ class GarageSettings(models.Model):
     invoice_footer = models.TextField(blank=True)
 
     @classmethod
-    def load(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
+    def load(cls, company):
+        company_id = getattr(company, 'pk', company)
+        obj, created = cls.objects.get_or_create(company_id=company_id)
+        if created and obj.name == 'Mon garage':
+            obj.name = Company.objects.get(pk=company_id).name
+            obj.save(update_fields=['name'])
         return obj
 
-    def save(self, *args, **kwargs):
-        self.pk = 1
-        super().save(*args, **kwargs)
 
-
-class ActivityLog(models.Model):
+class ActivityLog(CompanyScopedModel):
     """Chronological trail of important actions, shown in histories."""
     created_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey('auth.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
     entity = models.CharField(max_length=40)
     entity_id = models.PositiveIntegerField()
     action = models.CharField(max_length=40)
@@ -54,21 +61,42 @@ class ActivityLog(models.Model):
 
     @classmethod
     def record(cls, entity, obj, action, message, client_id=None, repair_order_id=None):
+        user = get_current_user()
         return cls.objects.create(
+            company_id=obj.company_id, user=user if user and user.is_authenticated else None,
             entity=entity, entity_id=obj.pk, action=action, message=message[:255],
             client_id=client_id, repair_order_id=repair_order_id,
         )
 
 
-def next_number(model, field, prefix):
-    """Sequential human number such as DR-2026-0042, scoped by year."""
+def next_number(model, field, prefix, company_id):
+    """Sequential human number such as DR-2026-0042, scoped by company and year."""
     from django.utils import timezone
     year = timezone.localdate().year
     base = f'{prefix}-{year}-'
-    last = (model.objects.filter(**{f'{field}__startswith': base})
+    last = (model.objects.filter(company_id=company_id, **{f'{field}__startswith': base})
             .order_by(f'-{field}').values_list(field, flat=True).first())
     seq = int(last.rsplit('-', 1)[1]) + 1 if last else 1
     return f'{base}{seq:04d}'
+
+
+@deconstructible
+class CompanyUploadTo:
+    """Files are stored per company: <folder>/<company id>/<yyyy>/<mm>/<name>."""
+
+    def __init__(self, folder):
+        self.folder = folder
+
+    def __call__(self, instance, filename):
+        from django.utils import timezone
+        return f'{self.folder}/{instance.company_id}/{timezone.now():%Y/%m}/{filename}'
+
+    def __eq__(self, other):
+        return isinstance(other, CompanyUploadTo) and other.folder == self.folder
+
+
+def company_upload_to(folder):
+    return CompanyUploadTo(folder)
 
 
 class Document(TimeStampedModel):
@@ -81,7 +109,7 @@ class Document(TimeStampedModel):
 
     title = models.CharField(max_length=150)
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default='other')
-    file = models.FileField(upload_to='documents/%Y/%m/')
+    file = models.FileField(upload_to=company_upload_to('documents'))
     client = models.ForeignKey('clients.Client', null=True, blank=True, on_delete=models.CASCADE, related_name='documents')
     vehicle = models.ForeignKey('clients.Vehicle', null=True, blank=True, on_delete=models.SET_NULL, related_name='documents')
     repair_order = models.ForeignKey('repairs.RepairOrder', null=True, blank=True, on_delete=models.SET_NULL, related_name='documents')

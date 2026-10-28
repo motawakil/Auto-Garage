@@ -26,7 +26,7 @@ export const NAV = [
   ] },
   { group: 'Système', items: [
     { to: '/rapports', label: 'Documents & rapports', icon: FileBarChart },
-    { to: '/parametres', label: 'Paramètres', icon: Settings },
+    { to: '/parametres', label: 'Paramètres', icon: Settings, permission: 'settings.view' },
   ] },
 ]
 

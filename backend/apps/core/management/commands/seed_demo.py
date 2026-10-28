@@ -5,11 +5,13 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from apps.accounts.models import Company, Membership
 from apps.billing.models import Invoice, Payment, Quote, QuoteLine
 from apps.billing.services import invoice_from_quote
 from apps.clients.models import Client, Vehicle
@@ -28,46 +30,82 @@ CARS = [('Renault', 'Clio IV', '1.5 dCi 90'), ('Dacia', 'Logan', '1.5 dCi 75'), 
         ('Volkswagen', 'Golf 7', '2.0 TDI 150'), ('Mercedes-Benz', 'Classe C W205', 'C220d'), ('Audi', 'A3 8V', '1.6 TDI 110'),
         ('SEAT', 'Ibiza', '1.0 TSI 95'), ('Opel', 'Corsa F', '1.2 Turbo 100'), ('Dacia', 'Duster', '1.5 dCi 110')]
 COLORS = ['Blanc', 'Gris', 'Noir', 'Rouge', 'Bleu', 'Argent']
+# Demo-only credentials, documented in the README. Never used outside DEBUG.
+DEMO_PASSWORDS = {'admin': 'Demo-Admin-2026!', 'user': 'Demo-Atelier-2026!'}
 
 
 class Command(BaseCommand):
-    help = 'Charge un jeu de données de démonstration réaliste.'
+    help = ('Charge un jeu de démonstration : entreprise « Garage El Jaouhari » (admin + utilisateur) et une seconde '
+            'entreprise « Garage Atlas Démo » pour vérifier le cloisonnement. Développement uniquement.')
 
     def add_arguments(self, parser):
-        parser.add_argument('--reset', action='store_true')
+        parser.add_argument('--reset', action='store_true', help='Supprime d’abord les données des entreprises de démo')
 
     @transaction.atomic
     def handle(self, *args, **opts):
+        if not settings.DEBUG:
+            self.stderr.write('seed_demo est réservé au développement (DJANGO_DEBUG=1).')
+            return
         random.seed(7)
-        if opts['reset']:
+        company = self._company('Garage El Jaouhari', 'garage-el-jaouhari', opts['reset'])
+        self._login(company, 'admin@eljaouhari.ma', 'Abdelilah', 'Jaouhari', 'admin', DEMO_PASSWORDS['admin'])
+        self._login(company, 'atelier@eljaouhari.ma', 'Samira', 'Hilali', 'user', DEMO_PASSWORDS['user'])
+        self._seed_garage(company)
+        self._seed_second_company(opts['reset'])
+
+    def _company(self, name, slug, reset):
+        company, _ = Company.objects.get_or_create(slug=slug, defaults={'name': name, 'city': 'Casablanca'})
+        if reset:
             for m in (Payment, Invoice, Quote, StockMovement, RepairTask, RepairOrder, Vehicle, Client, Part,
                       Supplier, Expert, InsuranceCompany, Employee, ActivityLog):
-                m.objects.all().delete()
+                m.objects.filter(company=company).delete()
+        return company
+
+    def _login(self, company, email, first, last, role, password):
+        User = get_user_model()
+        user, created = User.objects.get_or_create(username=email, defaults={'email': email, 'first_name': first, 'last_name': last})
+        if created:
+            user.set_password(password)
+            user.save()
+        Membership.objects.update_or_create(user=user, defaults={'company': company, 'role': role})
+        self.stdout.write(f'  {role:<5} {email}')
+
+    def _seed_second_company(self, reset):
+        company = self._company('Garage Atlas Démo', 'garage-atlas-demo', reset)
+        self._login(company, 'admin@atlas-demo.ma', 'Karim', 'Atlas', 'admin', DEMO_PASSWORDS['admin'])
+        if not Client.objects.filter(company=company).exists():
+            c = Client.objects.create(company=company, first_name='Nabil', last_name='Ait Lahcen', phone='06 99 00 11 22', city='Marrakech')
+            Vehicle.objects.create(company=company, client=c, brand='Toyota', model='Yaris', year=2021, plate='11111-A-7')
+
+    def _seed_garage(self, company):
+        if Client.objects.filter(company=company).exists():
+            self.stdout.write('Données déjà présentes (utilisez --reset pour régénérer).')
+            return
         today = timezone.localdate()
-        cfg = GarageSettings.load()
+        cfg = GarageSettings.load(company)
         cfg.address, cfg.phone, cfg.email = 'Zone industrielle Sidi Bernoussi, Lot 42', '+212 522 00 00 00', 'contact@garage-eljaouhari.ma'
         cfg.ice, cfg.rc, cfg.if_number = '001234567000089', 'RC 456789', 'IF 12345678'
         cfg.invoice_footer = 'Merci de votre confiance. Pièces garanties 12 mois.'
         cfg.save()
 
-        emps = [Employee.objects.create(first_name=f, last_name=l, role=r, phone=f'06 61 {i:02d} 22 33', hourly_cost=Decimal(c), color=col)
+        emps = [Employee.objects.create(company=company, first_name=f, last_name=l, role=r, phone=f'06 61 {i:02d} 22 33', hourly_cost=Decimal(c), color=col)
                 for i, (f, l, r, c, col) in enumerate([
                     ('Abdelilah', 'Jaouhari', 'manager', 0, '#ef4444'), ('Hicham', 'Ait Ali', 'mechanic', 60, '#f97316'),
                     ('Mustapha', 'Ziani', 'body', 55, '#eab308'), ('Brahim', 'Ouali', 'painter', 55, '#22c55e'),
                     ('Adil', 'Moussaoui', 'electrician', 65, '#3b82f6'), ('Samira', 'Hilali', 'reception', 40, '#a855f7')])]
         workers = emps[1:5]
 
-        insurers = [InsuranceCompany.objects.create(name=n, phone=p, payment_delay_days=d) for n, p, d in [
+        insurers = [InsuranceCompany.objects.create(company=company, name=n, phone=p, payment_delay_days=d) for n, p, d in [
             ('Wafa Assurance', '05 22 54 55 55', 45), ('AXA Assurance Maroc', '05 22 88 92 92', 60),
             ('RMA', '05 22 49 70 00', 60), ('Saham Assurance', '05 22 43 50 00', 75), ('MAMDA-MCMA', '05 37 71 07 07', 90)]]
         experts = []
         for f, l, firm in [('Khalid', 'Benjelloun', 'Cabinet Expertise Auto Atlas'), ('Noureddine', 'Filali', 'Expert Conseil Maroc'),
                            ('Hassan', 'Amrani', 'Cabinet Amrani & Associés')]:
-            e = Expert.objects.create(first_name=f, last_name=l, firm=firm, phone=f'06 70 {len(experts)}1 44 55')
+            e = Expert.objects.create(company=company, first_name=f, last_name=l, firm=firm, phone=f'06 70 {len(experts)}1 44 55')
             e.companies.set(random.sample(insurers, 2))
             experts.append(e)
 
-        suppliers = [Supplier.objects.create(name=n, contact_name=c, phone=p, city='Casablanca', delivery_days=d) for n, c, p, d in [
+        suppliers = [Supplier.objects.create(company=company, name=n, contact_name=c, phone=p, city='Casablanca', delivery_days=d) for n, c, p, d in [
             ('Auto Pièces Derb Omar', 'M. Kabbaj', '05 22 30 11 22', 1), ('Bosch Car Service Distribution', 'Mme Idrissi', '05 22 66 77 88', 3),
             ('Peinture Pro Maroc', 'M. Sefrioui', '05 22 40 41 42', 2), ('Casse Auto Ain Sebaa', 'M. Lamrani', '06 62 12 13 14', 1)]]
 
@@ -93,22 +131,22 @@ class Command(BaseCommand):
         for ref, oem, des, cat, brand, models_, yf, yt, eng, pa, pv in catalog:
             sup = suppliers[2] if cat == 'paint' else random.choice(suppliers[:2])
             # Demo parts carry no OEM reference: real references must come from a verified source (see OEM catalogue).
-            p = Part.objects.create(reference=ref, oem_reference='', designation=des, category=cat, brand=brand,
+            p = Part.objects.create(company=company, reference=ref, oem_reference='', designation=des, category=cat, brand=brand,
                                     compatible_models=models_, year_from=yf, year_to=yt, engines=eng,
                                     compatibility_verified=False, purchase_price=pa, sale_price=pv, supplier=sup,
                                     quantity=0, min_quantity=random.choice([1, 2, 3]),
                                     location=f'R{random.randint(1, 6)}-E{random.randint(1, 4)}')
-            StockMovement.objects.create(part=p, kind='in', quantity=random.choice([0, 1, 2, 4, 6, 10]) or 1, unit_cost=pa,
+            StockMovement.objects.create(company=company, part=p, kind='in', quantity=random.choice([0, 1, 2, 4, 6, 10]) or 1, unit_cost=pa,
                                          supplier=sup, date=today - timedelta(days=60), reason='Stock initial')
             parts.append(p)
         Part.objects.filter(reference__in=['PHR-208-G', 'AMT-W205-AV']).update(quantity=0)
 
         clients, vehicles = [], []
         for i in range(24):
-            company = i % 8 == 7
-            c = Client.objects.create(
-                kind='company' if company else 'individual', first_name='' if company else FIRST[i % 20],
-                last_name=LAST[i % 20], company_name=f'{LAST[i % 20]} Transport SARL' if company else '',
+            is_firm = i % 8 == 7
+            c = Client.objects.create(company=company,
+                kind='company' if is_firm else 'individual', first_name='' if is_firm else FIRST[i % 20],
+                last_name=LAST[i % 20], company_name=f'{LAST[i % 20]} Transport SARL' if is_firm else '',
                 phone=f'06 {60 + i % 10} {10 + i:02d} {20 + i * 3 % 70:02d} {30 + i * 7 % 60:02d}',
                 email=f'{LAST[i % 20].lower().replace(" ", "")}{i}@gmail.com', city=random.choice(CITIES),
                 address=f'{random.randint(1, 200)} Bd {random.choice(["Zerktouni", "Anfa", "Mohammed V", "Ghandi", "Al Qods"])}',
@@ -116,7 +154,7 @@ class Command(BaseCommand):
             clients.append(c)
             for _ in range(2 if i % 5 == 0 else 1):
                 brand, model_, engine = random.choice(CARS)
-                v = Vehicle.objects.create(
+                v = Vehicle.objects.create(company=company,
                     client=c, brand=brand, model=model_, engine=engine, year=random.randint(2013, 2024),
                     fuel='diesel' if 'd' in engine.lower() or 'TDI' in engine or 'HDi' in engine else 'petrol',
                     plate=f'{random.randint(10000, 99999)}-{random.choice("ABDHW")}-{random.choice([1, 6, 26, 40, 50])}',
@@ -134,7 +172,7 @@ class Command(BaseCommand):
             rtype = random.choice(['body', 'paint', 'body']) if insurance else random.choice(['mechanical', 'electrical', 'mechanical', 'polish'])
             entry = today - timedelta(days=(len(scenarios) - n) * 6 + random.randint(0, 4))
             stage = progress.index(status)
-            ro = RepairOrder.objects.create(
+            ro = RepairOrder.objects.create(company=company,
                 client=v.client, vehicle=v, repair_type=rtype, status=status, entry_date=entry,
                 expected_delivery_date=entry + timedelta(days=random.randint(5, 14)),
                 delivered_at=entry + timedelta(days=10) if stage >= progress.index('delivered') else None,
@@ -162,7 +200,7 @@ class Command(BaseCommand):
             # Quote
             if stage >= progress.index('expertise_done') or not insurance and stage >= 1:
                 compatible = [p for p in parts if p.brand in ('', v.brand)] or parts
-                q = Quote.objects.create(repair_order=ro, kind='insurance' if insurance else 'estimate', date=entry + timedelta(days=1),
+                q = Quote.objects.create(company=company, repair_order=ro, kind='insurance' if insurance else 'estimate', date=entry + timedelta(days=1),
                                          valid_until=entry + timedelta(days=31),
                                          status='accepted' if stage > progress.index('waiting_quote') else 'pending')
                 pos = 0
@@ -191,7 +229,7 @@ class Command(BaseCommand):
                 if q.status == 'accepted':
                     for line in q.lines.filter(line_type='part'):
                         if line.part and line.part.quantity > 0:
-                            StockMovement.objects.create(part=line.part, kind='out', quantity=1, repair_order=ro,
+                            StockMovement.objects.create(company=company, part=line.part, kind='out', quantity=1, repair_order=ro,
                                                          unit_cost=line.part.purchase_price, date=entry + timedelta(days=3),
                                                          reason=f'Sortie pour {ro.number}')
                             line.part.refresh_from_db()
@@ -206,18 +244,18 @@ class Command(BaseCommand):
                     inv.refresh_status()
                     client_part = inv.total_ttc_cache - inv.insurance_amount
                     if status in ('closed', 'delivered') or n == 5:
-                        Payment.objects.create(client=ro.client, repair_order=ro, invoice=inv, kind='deposit', method='cash',
+                        Payment.objects.create(company=company, client=ro.client, repair_order=ro, invoice=inv, kind='deposit', method='cash',
                                                amount=(client_part * Decimal('0.3')).quantize(Decimal('1')), date=entry + timedelta(days=1))
                     if status == 'closed':
-                        Payment.objects.create(client=ro.client, repair_order=ro, invoice=inv, method=random.choice(['cash', 'transfer']),
+                        Payment.objects.create(company=company, client=ro.client, repair_order=ro, invoice=inv, method=random.choice(['cash', 'transfer']),
                                                amount=client_part - (client_part * Decimal('0.3')).quantize(Decimal('1')),
                                                date=inv.date, reference=f'VIR{random.randint(100000, 999999)}')
                         if inv.insurance_amount:
-                            Payment.objects.create(client=ro.client, repair_order=ro, invoice=inv, origin='insurance', method='transfer',
+                            Payment.objects.create(company=company, client=ro.client, repair_order=ro, invoice=inv, origin='insurance', method='transfer',
                                                    amount=inv.insurance_amount, date=inv.date + timedelta(days=12),
                                                    reference=f'ASS-{random.randint(10000, 99999)}', bank='Attijariwafa Bank')
                     if status == 'delivered':
-                        Payment.objects.create(client=ro.client, repair_order=ro, invoice=inv, method='cheque', cheque_status='pending',
+                        Payment.objects.create(company=company, client=ro.client, repair_order=ro, invoice=inv, method='cheque', cheque_status='pending',
                                                amount=client_part - (client_part * Decimal('0.3')).quantize(Decimal('1')),
                                                date=inv.date, bank='BMCE Bank of Africa', reference=f'CHQ {random.randint(1000000, 9999999)}',
                                                cheque_due_date=today + timedelta(days=random.randint(-1, 5)))
@@ -233,7 +271,7 @@ class Command(BaseCommand):
                 for k_i, k in enumerate(kinds):
                     finished = stage >= progress.index('done') or (status in ('in_progress', 'quality_check') and k_i < len(kinds) // 2)
                     started = status in ('in_progress', 'quality_check') and k_i == len(kinds) // 2
-                    RepairTask.objects.create(
+                    RepairTask.objects.create(company=company,
                         repair_order=ro, kind=k, title=labels[k], employee=random.choice(workers),
                         status='done' if finished else 'in_progress' if started else 'todo',
                         start_date=entry + timedelta(days=2 + k_i), due_date=entry + timedelta(days=3 + k_i * 2),
@@ -241,8 +279,8 @@ class Command(BaseCommand):
                         hours_spent=Decimal(random.choice([1, 2, 3, 4])) if finished or started else 0)
 
         for workbook in sorted(Path(settings.BASE_DIR, 'data', 'oem').glob('*.xlsx')):
-            call_command('import_oem', str(workbook), stdout=self.stdout)
+            call_command('import_oem', str(workbook), company=company.slug, stdout=self.stdout)
 
         self.stdout.write(self.style.SUCCESS(
-            f'{Client.objects.count()} clients, {Vehicle.objects.count()} véhicules, {RepairOrder.objects.count()} dossiers, '
-            f'{Quote.objects.count()} devis, {Invoice.objects.count()} factures, {Payment.objects.count()} paiements.'))
+            f'{Client.objects.filter(company=company).count()} clients, {Vehicle.objects.filter(company=company).count()} véhicules, {RepairOrder.objects.filter(company=company).count()} dossiers, '
+            f'{Quote.objects.filter(company=company).count()} devis, {Invoice.objects.filter(company=company).count()} factures, {Payment.objects.filter(company=company).count()} paiements.'))

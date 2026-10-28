@@ -16,8 +16,9 @@ def _copy_lines(source_lines, model, **fk):
 @transaction.atomic
 def revise_quote(quote):
     """New version of a quote; the original is kept untouched for history."""
-    latest = Quote.objects.filter(number=quote.number).order_by('-version').first()
+    latest = Quote.objects.filter(company_id=quote.company_id, number=quote.number).order_by('-version').first()
     new = Quote.objects.create(
+        company_id=quote.company_id,
         number=quote.number, version=latest.version + 1, previous=quote,
         repair_order=quote.repair_order, kind=quote.kind, notes=quote.notes,
         valid_until=quote.valid_until,
@@ -32,7 +33,7 @@ def revise_quote(quote):
 @transaction.atomic
 def invoice_from_quote(quote, insurance_amount=None):
     ro = quote.repair_order
-    invoice = Invoice.objects.create(repair_order=ro, quote=quote, notes=quote.notes)
+    invoice = Invoice.objects.create(company_id=ro.company_id, repair_order=ro, quote=quote, notes=quote.notes)
     _copy_lines(quote.lines.all(), InvoiceLine, invoice=invoice)
     if insurance_amount is None and ro.is_insurance:
         insurance_amount = max(money(ro.insurance_approved_amount) - money(ro.deductible), ZERO)

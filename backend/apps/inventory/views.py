@@ -5,6 +5,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
+from apps.core.tenancy import CompanyScopedViewMixin
 from .models import OemEquivalence, OemReference, Part, StockMovement, Supplier
 from .oem_import import import_oem_workbook
 from .serializers import (
@@ -13,7 +14,7 @@ from .serializers import (
 )
 
 
-class SupplierViewSet(viewsets.ModelViewSet):
+class SupplierViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     ordering = ['name']
     serializer_class = SupplierSerializer
     search_fields = ['name', 'contact_name', 'phone', 'city']
@@ -22,7 +23,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
         return Supplier.objects.annotate(parts_count=Count('parts'))
 
 
-class PartViewSet(viewsets.ModelViewSet):
+class PartViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     search_fields = ['reference', 'oem_reference', 'alt_references', 'designation', 'brand', 'compatible_models']
     filterset_fields = ['category', 'condition', 'supplier', 'brand']
     ordering_fields = ['designation', 'quantity', 'sale_price']
@@ -40,7 +41,7 @@ class PartViewSet(viewsets.ModelViewSet):
     def compatible(self, request):
         """Catalogue lookup by brand / model / year / engine. Unverified matches are flagged."""
         p = request.query_params
-        qs = Part.objects.select_related('supplier')
+        qs = Part.objects.select_related('supplier').filter(company=request.company)
         if p.get('brand'):
             qs = qs.filter(brand__iexact=p['brand'])
         if p.get('model'):
@@ -52,17 +53,17 @@ class PartViewSet(viewsets.ModelViewSet):
             qs = qs.filter(Q(engines='') | Q(engines__icontains=p['engine']))
         if p.get('category'):
             qs = qs.filter(category=p['category'])
-        return Response(PartSerializer(qs[:200], many=True).data)
+        return Response(PartSerializer(qs[:200], many=True, context=self.get_serializer_context()).data)
 
     @action(detail=False)
     def brands(self, request):
         from apps.clients.models import Vehicle
-        brands = set(Part.objects.exclude(brand='').values_list('brand', flat=True))
-        brands |= set(Vehicle.objects.values_list('brand', flat=True))
+        brands = set(Part.objects.filter(company=request.company).exclude(brand='').values_list('brand', flat=True))
+        brands |= set(Vehicle.objects.filter(company=request.company).values_list('brand', flat=True))
         return Response(sorted(brands))
 
 
-class StockMovementViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class StockMovementViewSet(CompanyScopedViewMixin, mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     """Movements are append-only: corrections are recorded as new movements."""
     serializer_class = StockMovementSerializer
     queryset = StockMovement.objects.select_related('part', 'repair_order')
@@ -70,7 +71,7 @@ class StockMovementViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixin
     search_fields = ['part__designation', 'part__reference', 'reason', 'repair_order__number']
 
 
-class OemReferenceViewSet(viewsets.ModelViewSet):
+class OemReferenceViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = OemReferenceSerializer
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     filterset_fields = ['brand', 'model', 'year', 'engine', 'family', 'status', 'compatibility_confirmed']
@@ -95,7 +96,7 @@ class OemReferenceViewSet(viewsets.ModelViewSet):
         if not file:
             raise ValidationError({'file': 'Sélectionnez un fichier Excel (.xlsx).'})
         try:
-            stats = import_oem_workbook(file)
+            stats = import_oem_workbook(file, request.company)
         except ValueError as exc:
             raise ValidationError({'file': str(exc)})
         except Exception:
@@ -111,17 +112,17 @@ class OemReferenceViewSet(viewsets.ModelViewSet):
             row = families.setdefault(fam, {'family': fam, 'total': 0, 'unknown': 0, 'to_verify': 0, 'confirmed': 0})
             row['total'] += c
             row[st] += c
-        vehicles = list(OemReference.objects.order_by().values('brand', 'model', 'year', 'engine').annotate(c=Count('id')))
+        vehicles = list(OemReference.objects.filter(company=request.company).order_by().values('brand', 'model', 'year', 'engine').annotate(c=Count('id')))
         return Response({
             'total': sum(by_status.values()),
             'by_status': {k: by_status.get(k, 0) for k, _ in OemReference.STATUS_CHOICES},
             'families': sorted(families.values(), key=lambda r: r['family']),
             'vehicles': vehicles,
-            'equivalences': OemEquivalence.objects.filter(oem__in=qs).count(),
+            'equivalences': OemEquivalence.objects.filter(company=request.company, oem__in=qs).count(),
         })
 
 
-class OemEquivalenceViewSet(viewsets.ModelViewSet):
+class OemEquivalenceViewSet(CompanyScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = OemEquivalenceSerializer
     queryset = OemEquivalence.objects.select_related('oem', 'supplier')
     filterset_fields = ['oem', 'kind', 'verified', 'supplier']

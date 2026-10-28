@@ -1,7 +1,42 @@
 import axios from 'axios'
 import { toast } from 'sonner'
 
-export const api = axios.create({ baseURL: '/api' })
+export const api = axios.create({ baseURL: '/api', withCredentials: true })
+
+const AUTH_PATHS = ['/auth/login/', '/auth/refresh/', '/auth/logout/', '/auth/csrf/']
+
+function readCookie(name) {
+  return document.cookie.split('; ').find((c) => c.startsWith(`${name}=`))?.split('=')[1]
+}
+
+// Tokens live in httpOnly cookies (never readable here); the CSRF token is echoed on every unsafe request.
+api.interceptors.request.use((config) => {
+  if (!['get', 'head', 'options'].includes((config.method || 'get').toLowerCase())) {
+    const token = readCookie('csrftoken')
+    if (token) config.headers['X-CSRFToken'] = decodeURIComponent(token)
+  }
+  return config
+})
+
+// Single-flight refresh: concurrent 401s wait for one refresh, then replay. (Karizma One sets its flag too late.)
+let refreshing = null
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const { config, response } = error
+    const isAuthCall = AUTH_PATHS.some((p) => config?.url?.endsWith(p))
+    if (response?.status !== 401 || !config || config._retry || isAuthCall) return Promise.reject(error)
+    config._retry = true
+    refreshing ??= api.post('/auth/refresh/').finally(() => { refreshing = null })
+    try {
+      await refreshing
+      return api(config)
+    } catch (refreshError) {
+      window.dispatchEvent(new CustomEvent('auth:expired'))
+      return Promise.reject(refreshError)
+    }
+  },
+)
 
 /** Normalises every DRF error shape ({detail}, {field: [msg]}, [msg]) into one readable message. */
 export function getApiErrorMessage(error, fallback = 'Une erreur est survenue.') {
@@ -23,7 +58,8 @@ export function getFieldErrors(error) {
 }
 
 export function showApiError(error, fallback) {
-  toast.error(getApiErrorMessage(error, fallback))
+  if (error?.response?.status === 401) return // handled by the session layer (redirect to login)
+  toast.error(getApiErrorMessage(error, fallback), error?.response?.status === 403 ? { id: 'permission-denied' } : undefined)
 }
 
 /** REST resource factory: one place for every endpoint's CRUD calls. */
@@ -58,4 +94,14 @@ export const resources = {
   documents: createResource('documents'),
   oemReferences: createResource('oem-references'),
   oemEquivalences: createResource('oem-equivalences'),
+}
+
+/** Session endpoints (Karizma One style: one api object per feature). */
+export const authApi = {
+  csrf: () => api.get('/auth/csrf/'),
+  me: () => api.get('/auth/me/').then((r) => r.data),
+  login: (credentials) => api.post('/auth/login/', credentials).then((r) => r.data),
+  logout: () => api.post('/auth/logout/'),
+  changePassword: (data) => api.post('/auth/password/', data).then((r) => r.data),
+  users: () => api.get('/auth/users/').then((r) => r.data),
 }

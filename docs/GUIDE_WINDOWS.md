@@ -58,7 +58,12 @@ cd $HOME\Documents\Auto-Garage\frontend
 npm run dev
 ```
 
-Ouvrir **http://localhost:5180**.
+Ouvrir **http://localhost:5180** et se connecter avec un compte de démonstration :
+
+- Administrateur : `admin@eljaouhari.ma` / `Demo-Admin-2026!`
+- Utilisateur (sans accès aux paramètres) : `atelier@eljaouhari.ma` / `Demo-Atelier-2026!`
+
+Sur la page de connexion, les boutons « Comptes de démonstration » remplissent le formulaire.
 
 ## 5. Mettre à jour (pull)
 
@@ -73,6 +78,14 @@ cd ..\frontend
 npm install --legacy-peer-deps
 ```
 
+Si la mise à jour annonce une réinitialisation des migrations (voir AGENTS.md, journal des versions) :
+```powershell
+cd $HOME\Documents\Auto-Garage\backend
+del db.sqlite3
+.venv\Scripts\python manage.py migrate
+.venv\Scripts\python manage.py loaddata data\demo\demo_data.json
+```
+
 ## 6. Problèmes fréquents
 
 | Problème | Solution |
@@ -82,6 +95,8 @@ npm install --legacy-peer-deps
 | PowerShell bloque `npm` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` puis `O` |
 | Port 8010 / 5180 occupé | Fermer l'ancienne fenêtre du serveur |
 | Page vide | Vérifier que le backend tourne |
+| « Vérification CSRF échouée » | Ouvrir l'application via http://localhost:5180 (pas 127.0.0.1) ou ajouter l'origine dans `DJANGO_CSRF_TRUSTED_ORIGINS` du `.env` |
+| « Trop de tentatives » | Attendre 15 minutes, ou redémarrer le backend (le compteur est en mémoire en développement) |
 | `loaddata` : erreur d'unicité | La base contient déjà des données : supprimer `backend\db.sqlite3`, puis `migrate` et `loaddata` |
 
 Téléphone sur le même Wi-Fi : `http://<IP-du-PC>:5180` (IP via `ipconfig`, « Adresse IPv4 »).

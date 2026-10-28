@@ -1,10 +1,11 @@
 from django.db.models import Q
 from rest_framework import serializers
 
+from apps.core.tenancy import CompanyModelSerializer
 from .models import OemEquivalence, OemReference, Part, StockMovement, Supplier
 
 
-class SupplierSerializer(serializers.ModelSerializer):
+class SupplierSerializer(CompanyModelSerializer):
     parts_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
@@ -12,7 +13,7 @@ class SupplierSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class PartSerializer(serializers.ModelSerializer):
+class PartSerializer(CompanyModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default='')
     category_label = serializers.CharField(source='get_category_display', read_only=True)
     condition_label = serializers.CharField(source='get_condition_display', read_only=True)
@@ -35,7 +36,7 @@ class PartCreateSerializer(PartSerializer):
         read_only_fields = []
 
 
-class StockMovementSerializer(serializers.ModelSerializer):
+class StockMovementSerializer(CompanyModelSerializer):
     part_label = serializers.CharField(source='part.__str__', read_only=True)
     kind_label = serializers.CharField(source='get_kind_display', read_only=True)
     repair_order_number = serializers.CharField(source='repair_order.number', read_only=True, default='')
@@ -60,7 +61,7 @@ class StockMovementSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class OemEquivalenceSerializer(serializers.ModelSerializer):
+class OemEquivalenceSerializer(CompanyModelSerializer):
     kind_label = serializers.CharField(source='get_kind_display', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default='')
     oem_label = serializers.CharField(source='oem.__str__', read_only=True)
@@ -78,7 +79,7 @@ class OemEquivalenceSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class OemReferenceSerializer(serializers.ModelSerializer):
+class OemReferenceSerializer(CompanyModelSerializer):
     status_label = serializers.CharField(source='get_status_display', read_only=True)
     part_label = serializers.CharField(source='part.__str__', read_only=True, default='')
     equivalences = OemEquivalenceSerializer(many=True, read_only=True)
@@ -97,7 +98,7 @@ class OemReferenceSerializer(serializers.ModelSerializer):
             q |= Q(oem_reference__iexact=r) | Q(reference__iexact=r) | Q(alt_references__icontains=r)
         return [{'id': p.id, 'reference': p.reference, 'designation': p.designation, 'quantity': p.quantity,
                  'sale_price': p.sale_price, 'condition': p.get_condition_display()}
-                for p in Part.objects.filter(q).distinct()[:5]]
+                for p in Part.objects.filter(q, company_id=obj.company_id).distinct()[:5]]
 
     def validate(self, attrs):
         g = lambda k: attrs.get(k, getattr(self.instance, k, None))

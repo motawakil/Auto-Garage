@@ -39,7 +39,10 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-only-insecure-key-change-m
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
+if not DEBUG and SECRET_KEY.startswith('dev-only'):
+    raise RuntimeError('DJANGO_SECRET_KEY doit être défini en production (backend/.env).')
+
+ALLOWED_HOSTS = [h for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '*' if DEBUG else '').split(',') if h]
 
 
 # Application definition
@@ -52,8 +55,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'corsheaders',
+    'apps.accounts',
     'apps.core',
     'apps.clients',
     'apps.staff',
@@ -69,6 +74,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.accounts.middleware.CurrentUserMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -108,18 +114,10 @@ DATABASES = {
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 10}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 
@@ -153,8 +151,52 @@ MAILERS = {
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# The frontend is served from the same origin (Vite proxy in dev, reverse proxy in prod): cookies stay first-party.
 CORS_ALLOWED_ORIGINS = [o for o in os.environ.get('DJANGO_CORS_ORIGINS', '').split(',') if o]
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get(
+    'DJANGO_CSRF_TRUSTED_ORIGINS', 'http://localhost:5180,http://127.0.0.1:5180' if DEBUG else '').split(',') if o]
+
+# --- Authentication (JWT in httpOnly cookies, as in Karizma One — with rotation + blacklist enforced) ---
+from datetime import timedelta  # noqa: E402
+
+COOKIE_SECURE = os.environ.get('DJANGO_COOKIE_SECURE', '0' if DEBUG else '1') == '1'
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.environ.get('JWT_ACCESS_MINUTES', '15'))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.environ.get('JWT_REFRESH_DAYS', '7'))),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+}
+AUTH_COOKIES = {
+    'access': {'name': 'gej_access', 'path': '/api/'},
+    'refresh': {'name': 'gej_refresh', 'path': '/api/auth/'},
+}
+AUTH_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = COOKIE_SECURE
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = False  # read by the frontend to send X-CSRFToken
+SESSION_COOKIE_SECURE = COOKIE_SECURE
+
+import sys  # noqa: E402
+
+if 'test' in sys.argv:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']  # fast tests only
+
+# Brute-force protection on login (per account + per IP).
+LOGIN_MAX_ATTEMPTS = int(os.environ.get('LOGIN_MAX_ATTEMPTS', '5'))
+LOGIN_LOCKOUT_MINUTES = int(os.environ.get('LOGIN_LOCKOUT_MINUTES', '15'))
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SSL_REDIRECT', '1') == '1'
+    SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'same-origin'
+    X_FRAME_OPTIONS = 'DENY'
 
 REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': [
@@ -164,7 +206,9 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'apps.core.pagination.StandardPagination',
     'PAGE_SIZE': 25,
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
-    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_PERMISSION_CLASSES': ['apps.accounts.permissions.IsCompanyMember'],
+    'DEFAULT_AUTHENTICATION_CLASSES': ['apps.accounts.authentication.CookieJWTAuthentication'],
+    'DEFAULT_THROTTLE_RATES': {'login': os.environ.get('LOGIN_THROTTLE_RATE', '20/min')},
+    'EXCEPTION_HANDLER': 'apps.core.exceptions.api_exception_handler',
     'COERCE_DECIMAL_TO_STRING': False,
 }

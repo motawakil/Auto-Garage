@@ -2,13 +2,14 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.core.tenancy import CompanyModelSerializer
 from apps.core.models import ActivityLog
 from .models import Invoice, InvoiceLine, Payment, Quote, QuoteLine, money
 
 LINE_READ = ['amount_ht', 'amount_vat', 'amount_ttc']
 
 
-class LineSerializerMixin(serializers.ModelSerializer):
+class LineSerializerMixin(CompanyModelSerializer):
     amount_ht = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     amount_vat = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
     amount_ttc = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
@@ -37,7 +38,7 @@ class TotalsField(serializers.Field):
         return {k: float(v) for k, v in obj.compute_totals().items()}
 
 
-class LinesDocumentSerializer(serializers.ModelSerializer):
+class LinesDocumentSerializer(CompanyModelSerializer):
     """Writes lines as a whole list: the document's lines are replaced atomically."""
     line_model = None
     fk_name = None
@@ -95,7 +96,7 @@ class QuoteSerializer(LinesDocumentSerializer):
         read_only_fields = ['version', 'previous', 'total_ttc_cache']
 
     def get_versions(self, obj):
-        return list(Quote.objects.filter(number=obj.number).order_by('version')
+        return list(Quote.objects.filter(company_id=obj.company_id, number=obj.number).order_by('version')
                     .values('id', 'version', 'status', 'total_ttc_cache', 'date'))
 
     def validate(self, attrs):
@@ -155,7 +156,7 @@ class InvoiceSerializer(LinesDocumentSerializer):
                            client_id=ro.client_id, repair_order_id=ro.pk)
 
 
-class PaymentSerializer(serializers.ModelSerializer):
+class PaymentSerializer(CompanyModelSerializer):
     number = serializers.CharField(read_only=True)
     client_name = serializers.CharField(source='client.display_name', read_only=True)
     repair_order_number = serializers.CharField(source='repair_order.number', read_only=True, default='')
@@ -166,10 +167,15 @@ class PaymentSerializer(serializers.ModelSerializer):
     cheque_status_label = serializers.CharField(source='get_cheque_status_display', read_only=True)
     is_received = serializers.BooleanField(read_only=True)
     is_pending = serializers.BooleanField(read_only=True)
+    receipt_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Payment
         fields = '__all__'
+        extra_kwargs = {'receipt': {'write_only': True}}
+
+    def get_receipt_url(self, obj):
+        return f'/api/payments/{obj.pk}/receipt/' if obj.receipt else None
 
     def validate(self, attrs):
         g = lambda k: attrs.get(k, getattr(self.instance, k, None))

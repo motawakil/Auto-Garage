@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import models
 from django.utils import timezone
 
-from apps.core.models import TimeStampedModel, GarageSettings, next_number
+from apps.core.models import GarageSettings, TimeStampedModel, company_upload_to, next_number
 
 ZERO = Decimal('0.00')
 CENT = Decimal('0.01')
@@ -38,9 +38,12 @@ class DocumentLine(models.Model):
         abstract = True
         ordering = ['position', 'id']
 
+    def get_company_id(self):
+        raise NotImplementedError
+
     def save(self, *args, **kwargs):
         if self.vat_rate is None:
-            cfg = GarageSettings.load()
+            cfg = GarageSettings.load(self.get_company_id())
             self.vat_rate = cfg.parts_vat_rate if self.line_type == 'part' else cfg.services_vat_rate
         super().save(*args, **kwargs)
 
@@ -98,7 +101,7 @@ class Quote(TotalsMixin, TimeStampedModel):
 
     class Meta:
         ordering = ['-date', '-created_at']
-        unique_together = [('number', 'version')]
+        unique_together = [('company', 'number', 'version')]
 
     def __str__(self):
         return f'{self.number} v{self.version}'
@@ -109,7 +112,7 @@ class Quote(TotalsMixin, TimeStampedModel):
 
     def save(self, *args, **kwargs):
         if not self.number:
-            self.number = next_number(Quote, 'number', 'DV')
+            self.number = next_number(Quote, 'number', 'DV', self.company_id)
         super().save(*args, **kwargs)
 
     def refresh_cache(self):
@@ -123,6 +126,9 @@ class QuoteLine(DocumentLine):
     class Meta(DocumentLine.Meta):
         pass
 
+    def get_company_id(self):
+        return self.quote.company_id
+
 
 class Invoice(TotalsMixin, TimeStampedModel):
     STATUS_CHOICES = [
@@ -130,7 +136,7 @@ class Invoice(TotalsMixin, TimeStampedModel):
         ('paid', 'Payée'), ('overdue', 'En retard'), ('disputed', 'En litige'), ('cancelled', 'Annulée'),
     ]
 
-    number = models.CharField(max_length=30, unique=True, editable=False)
+    number = models.CharField(max_length=30, editable=False)
     repair_order = models.ForeignKey('repairs.RepairOrder', on_delete=models.PROTECT, related_name='invoices')
     quote = models.ForeignKey(Quote, null=True, blank=True, on_delete=models.SET_NULL, related_name='invoices')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
@@ -145,6 +151,7 @@ class Invoice(TotalsMixin, TimeStampedModel):
 
     class Meta:
         ordering = ['-date', '-created_at']
+        constraints = [models.UniqueConstraint(fields=['company', 'number'], name='unique_invoice_number_per_company')]
 
     def __str__(self):
         return self.number
@@ -155,7 +162,7 @@ class Invoice(TotalsMixin, TimeStampedModel):
 
     def save(self, *args, **kwargs):
         if not self.number:
-            self.number = next_number(Invoice, 'number', 'FA')
+            self.number = next_number(Invoice, 'number', 'FA', self.company_id)
         super().save(*args, **kwargs)
 
     def paid_amount(self):
@@ -185,6 +192,9 @@ class InvoiceLine(DocumentLine):
     class Meta(DocumentLine.Meta):
         pass
 
+    def get_company_id(self):
+        return self.invoice.company_id
+
 
 class Payment(TimeStampedModel):
     KIND_CHOICES = [('payment', 'Paiement'), ('deposit', 'Acompte'), ('refund', 'Remboursement')]
@@ -213,7 +223,7 @@ class Payment(TimeStampedModel):
     refund_of = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='refunds')
     reason = models.CharField('motif', max_length=255, blank=True)
     comment = models.TextField(blank=True)
-    receipt = models.FileField('justificatif', upload_to='receipts/%Y/%m/', null=True, blank=True)
+    receipt = models.FileField('justificatif', upload_to=company_upload_to('receipts'), null=True, blank=True)
     is_cancelled = models.BooleanField(default=False)
 
     class Meta:

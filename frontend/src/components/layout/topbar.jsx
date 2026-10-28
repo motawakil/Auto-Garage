@@ -1,10 +1,13 @@
-import { Bell, ChevronDown, Menu, Moon, Plus, Search, Settings, Sun } from 'lucide-react'
+import { Bell, Building2, ChevronDown, KeyRound, LogOut, Menu, Moon, Plus, Search, Settings, Sun } from 'lucide-react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { MenuItem, Popover } from '@/components/ui/popover'
+import { useAuth } from '@/context/auth-provider'
 import { useTheme } from '@/context/theme-provider'
+import { ChangePasswordPanel } from '@/features/auth/change-password-panel'
 import { cn } from '@/lib/utils'
 import { useNotificationsCount } from './sidebar'
 
@@ -14,6 +17,8 @@ export function Topbar({ onMenu, onSearch }) {
   const { theme, toggle } = useTheme()
   const navigate = useNavigate()
   const { data: notifs = [] } = useNotificationsCount()
+  const { user, company, roleLabel, can, logout } = useAuth()
+  const [pwdOpen, setPwdOpen] = useState(false)
   const high = notifs.filter((n) => n.priority === 'high').length
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
 
@@ -76,13 +81,13 @@ export function Topbar({ onMenu, onSearch }) {
         </Popover>
 
         <Popover
-          className="w-56 p-1.5"
+          className="w-64 p-1.5"
           trigger={({ toggle: t }) => (
             <button onClick={t} className="ml-1 flex items-center gap-2.5 rounded-xl py-1 pl-1 pr-2 hover:bg-muted cursor-pointer">
-              <Avatar name="Abdelilah Jaouhari" />
+              <Avatar name={user?.full_name} />
               <span className="hidden text-left leading-tight xl:block">
-                <span className="block text-[13px] font-semibold">A. Jaouhari</span>
-                <span className="block text-[11px] text-muted-foreground">Gérant</span>
+                <span className="block max-w-40 truncate text-[13px] font-semibold">{user?.full_name}</span>
+                <span className="block text-[11px] text-muted-foreground">{roleLabel}</span>
               </span>
               <ChevronDown className="hidden size-4 text-muted-foreground xl:block" />
             </button>
@@ -91,17 +96,21 @@ export function Topbar({ onMenu, onSearch }) {
           {({ close }) => (
             <>
               <div className="px-2.5 py-2">
-                <p className="text-sm font-semibold">Abdelilah Jaouhari</p>
-                <p className="text-xs text-muted-foreground">Gérant · Accès complet</p>
+                <p className="truncate text-sm font-semibold">{user?.full_name}</p>
+                <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+                <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><Building2 className="size-3.5" />{company?.name} · {roleLabel}</p>
               </div>
               <div className="my-1 h-px bg-border" />
-              <MenuItem icon={Settings} onClick={() => { navigate('/parametres'); close() }}>Paramètres du garage</MenuItem>
+              {can('settings.view') && <MenuItem icon={Settings} onClick={() => { navigate('/parametres'); close() }}>Paramètres du garage</MenuItem>}
+              <MenuItem icon={KeyRound} onClick={() => { setPwdOpen(true); close() }}>Changer le mot de passe</MenuItem>
               <MenuItem icon={theme === 'dark' ? Sun : Moon} onClick={() => { toggle(); close() }}>{theme === 'dark' ? 'Mode clair' : 'Mode sombre'}</MenuItem>
-              <p className="px-2.5 pb-1 pt-2 text-[11px] text-muted-foreground">Authentification prévue dans la prochaine version.</p>
+              <div className="my-1 h-px bg-border" />
+              <MenuItem icon={LogOut} danger onClick={() => { close(); logout() }}>Se déconnecter</MenuItem>
             </>
           )}
         </Popover>
       </div>
+      <ChangePasswordPanel open={pwdOpen} onClose={() => setPwdOpen(false)} />
     </header>
   )
 }

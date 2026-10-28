@@ -20,12 +20,12 @@ const sizes = {
 }
 
 export const Button = forwardRef(function Button(
-  { variant = 'secondary', size = 'md', loading, icon: Icon, className, children, disabled, ...props }, ref,
+  { variant = 'secondary', size = 'md', loading, icon: Icon, className, children, disabled, type = 'button', ...props }, ref,
 ) {
   return (
     <button
       ref={ref}
-      type="button"
+      type={type}
       disabled={disabled || loading}
       className={cn(
         'inline-flex items-center justify-center font-medium whitespace-nowrap transition-all select-none',

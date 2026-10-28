@@ -1,6 +1,7 @@
 from django.db import models, transaction
 from django.db.models import F
 
+from apps.accounts.models import CompanyScopedModel
 from apps.core.models import TimeStampedModel
 
 
@@ -31,7 +32,7 @@ class Part(TimeStampedModel):
         ('other', 'Autre'),
     ]
 
-    reference = models.CharField('référence interne', max_length=60, unique=True)
+    reference = models.CharField('référence interne', max_length=60)
     oem_reference = models.CharField('référence OEM', max_length=60, blank=True)
     alt_references = models.CharField('références alternatives', max_length=255, blank=True)
     designation = models.CharField(max_length=200)
@@ -52,6 +53,7 @@ class Part(TimeStampedModel):
 
     class Meta:
         ordering = ['designation']
+        constraints = [models.UniqueConstraint(fields=['company', 'reference'], name='unique_part_reference_per_company')]
 
     def __str__(self):
         return f'{self.reference} · {self.designation}'
@@ -61,7 +63,7 @@ class Part(TimeStampedModel):
         return self.quantity <= self.min_quantity
 
 
-class StockMovement(models.Model):
+class StockMovement(CompanyScopedModel):
     KIND_CHOICES = [
         ('in', 'Entrée'), ('out', 'Sortie réparation'), ('supplier_return', 'Retour fournisseur'),
         ('unused_return', 'Retour pièce inutilisée'), ('adjustment', 'Ajustement'),
@@ -132,7 +134,7 @@ class OemReference(TimeStampedModel):
 
     class Meta:
         ordering = ['brand', 'model', 'family', 'designation']
-        unique_together = [('brand', 'model', 'year', 'engine', 'designation')]
+        unique_together = [('company', 'brand', 'model', 'year', 'engine', 'designation')]
 
     def __str__(self):
         return f'{self.brand} {self.model} · {self.designation}'

@@ -4,7 +4,7 @@ from apps.core.models import TimeStampedModel, next_number
 
 
 class InsuranceCompany(TimeStampedModel):
-    name = models.CharField(max_length=150, unique=True)
+    name = models.CharField(max_length=150)
     phone = models.CharField(max_length=40, blank=True)
     email = models.EmailField(blank=True)
     address = models.CharField(max_length=255, blank=True)
@@ -14,6 +14,7 @@ class InsuranceCompany(TimeStampedModel):
     class Meta:
         ordering = ['name']
         verbose_name_plural = 'insurance companies'
+        constraints = [models.UniqueConstraint(fields=['company', 'name'], name='unique_insurer_per_company')]
 
     def __str__(self):
         return self.name
@@ -61,7 +62,7 @@ class RepairOrder(TimeStampedModel):
     ]
     PRIORITY_CHOICES = [('low', 'Basse'), ('normal', 'Normale'), ('high', 'Haute'), ('urgent', 'Urgente')]
 
-    number = models.CharField(max_length=30, unique=True, editable=False)
+    number = models.CharField(max_length=30, editable=False)
     client = models.ForeignKey('clients.Client', on_delete=models.PROTECT, related_name='repair_orders')
     vehicle = models.ForeignKey('clients.Vehicle', on_delete=models.PROTECT, related_name='repair_orders')
     repair_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='mechanical')
@@ -92,13 +93,14 @@ class RepairOrder(TimeStampedModel):
 
     class Meta:
         ordering = ['-entry_date', '-created_at']
+        constraints = [models.UniqueConstraint(fields=['company', 'number'], name='unique_repair_number_per_company')]
 
     def __str__(self):
         return self.number
 
     def save(self, *args, **kwargs):
         if not self.number:
-            self.number = next_number(RepairOrder, 'number', 'DR')
+            self.number = next_number(RepairOrder, 'number', 'DR', self.company_id)
         super().save(*args, **kwargs)
 
 

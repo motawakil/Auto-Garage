@@ -1,10 +1,11 @@
 from django.db.models import Q
 from rest_framework import serializers
 
+from apps.core.tenancy import CompanyModelSerializer
 from .models import Client, Vehicle
 
 
-class VehicleSerializer(serializers.ModelSerializer):
+class VehicleSerializer(CompanyModelSerializer):
     client_name = serializers.CharField(source='client.display_name', read_only=True)
     fuel_label = serializers.CharField(source='get_fuel_display', read_only=True)
     repairs_count = serializers.IntegerField(read_only=True, default=0)
@@ -23,7 +24,7 @@ class VehicleSerializer(serializers.ModelSerializer):
         return value
 
 
-class ClientSerializer(serializers.ModelSerializer):
+class ClientSerializer(CompanyModelSerializer):
     display_name = serializers.CharField(read_only=True)
     code = serializers.CharField(read_only=True)
     vehicles_count = serializers.IntegerField(read_only=True, default=0)
@@ -43,7 +44,7 @@ class ClientSerializer(serializers.ModelSerializer):
         # Duplicate guard: same phone, or same CIN, means the same person.
         phone = attrs.get('phone') or getattr(self.instance, 'phone', '')
         cin = attrs.get('cin') or getattr(self.instance, 'cin', '')
-        dupes = Client.objects.filter(Q(phone=phone) | (Q(cin=cin) if cin else Q(pk__in=[])))
+        dupes = Client.objects.filter(company=self._company()).filter(Q(phone=phone) | (Q(cin=cin) if cin else Q(pk__in=[])))
         if self.instance:
             dupes = dupes.exclude(pk=self.instance.pk)
         dupe = dupes.first()

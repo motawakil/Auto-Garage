@@ -1,16 +1,20 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { Building2, DatabaseBackup, KeyRound, ShieldCheck, UserCog } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Building2, DatabaseBackup, KeyRound, ShieldCheck, UserCog, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { CrudPage } from '@/components/common/crud-page'
+import { DataTable } from '@/components/common/data-table'
 import { PageHeader } from '@/components/common/page-header'
 import { ResourceForm } from '@/components/common/resource-form'
+import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Tabs } from '@/components/ui/tabs'
-import { api, resources, showApiError } from '@/lib/api'
+import { Can, useAuth } from '@/context/auth-provider'
+import { api, authApi, resources, showApiError } from '@/lib/api'
+import { formatRelative } from '@/lib/utils'
 import { useGarageSettings } from '@/features/quotes/use-settings'
 
 const garageFields = [
@@ -78,7 +82,8 @@ export default function Settings() {
       <PageHeader title="Paramètres & sécurité" description="Configuration du garage, répertoires assurances et experts, sécurité." />
       <Tabs value={tab} onChange={setTab} tabs={[
         { value: 'garage', label: 'Garage', icon: Building2 }, { value: 'insurers', label: 'Assurances', icon: ShieldCheck },
-        { value: 'experts', label: 'Experts', icon: UserCog }, { value: 'security', label: 'Sécurité', icon: KeyRound },
+        { value: 'experts', label: 'Experts', icon: UserCog }, { value: 'users', label: 'Utilisateurs', icon: Users },
+        { value: 'security', label: 'Sécurité', icon: KeyRound },
       ]} />
       {tab === 'garage' && <GarageForm />}
       {tab === 'insurers' && (
@@ -101,13 +106,15 @@ export default function Settings() {
             { key: 'count', header: 'Expertises', align: 'right', render: (e) => <span className="tabular">{e.repairs_count}</span> },
           ]} />
       )}
+      {tab === 'users' && <Can permission="users.view"><CompanyUsers /></Can>}
       {tab === 'security' && (
         <div className="grid max-w-4xl gap-4 md:grid-cols-2">
           {[
-            { icon: KeyRound, title: 'Utilisateurs & droits', text: 'Authentification et rôles (gérant, réception, atelier, comptable) prévus dans la prochaine version. L’API est déjà prête à être protégée par rôle.' },
-            { icon: DatabaseBackup, title: 'Sauvegardes', text: 'Base SQLite locale en MVP : sauvegardez le fichier backend/db.sqlite3 et le dossier media/. PostgreSQL recommandé en production.' },
-            { icon: ShieldCheck, title: 'Traçabilité', text: 'Les actions importantes (statuts, devis, factures, paiements, annulations) sont journalisées dans l’historique.' },
-            { icon: Building2, title: 'Accès PC & téléphone', text: 'Une seule base partagée : le téléphone accède à la même application via le réseau local du garage.' },
+            { icon: KeyRound, title: 'Authentification', text: 'Session par cookies httpOnly (JWT 15 min, renouvellement avec rotation et révocation), protection CSRF, verrouillage après 5 échecs de connexion.' },
+            { icon: Users, title: 'Rôles', text: 'Administrateur : accès complet. Utilisateur : tous les modules métier, sans les paramètres ni la gestion des référentiels. Droits à valider avec le garage.' },
+            { icon: DatabaseBackup, title: 'Sauvegardes', text: 'Base SQLite locale en développement : sauvegardez backend/db.sqlite3 et media/. PostgreSQL et sauvegardes automatiques prévus pour la production.' },
+            { icon: ShieldCheck, title: 'Cloisonnement', text: 'Chaque compte appartient à une seule entreprise : ses données (clients, dossiers, factures, fichiers…) sont invisibles des autres garages.' },
+            { icon: Building2, title: 'Comptes', text: 'Entreprises et identifiants sont créés par la plateforme (futur portail sécurisé), jamais depuis l’application du garage.' },
           ].map((b) => (
             <Card key={b.title} className="p-5">
               <b.icon className="size-5 text-primary" />
@@ -118,5 +125,25 @@ export default function Settings() {
         </div>
       )}
     </div>
+  )
+}
+
+function CompanyUsers() {
+  const { company } = useAuth()
+  const { data = [], isLoading } = useQuery({ queryKey: ['company-users'], queryFn: authApi.users })
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader title={`Utilisateurs — ${company?.name}`} description="Les comptes sont créés et désactivés depuis le portail de la plateforme." icon={Users} />
+      <DataTable
+        rows={data}
+        loading={isLoading}
+        columns={[
+          { key: 'name', header: 'Utilisateur', mobile: 'title', render: (u) => <div className="flex items-center gap-3"><Avatar name={u.full_name} /><div><p className="font-medium">{u.full_name}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div> },
+          { key: 'role', header: 'Rôle', mobile: 'subtitle', render: (u) => <Badge tone={u.role === 'admin' ? 'red' : 'neutral'}>{u.role_label}</Badge> },
+          { key: 'active', header: 'Statut', render: (u) => <Badge tone={u.is_active ? 'green' : 'neutral'} dot>{u.is_active ? 'Actif' : 'Désactivé'}</Badge> },
+          { key: 'login', header: 'Dernière connexion', render: (u) => <span className="text-muted-foreground">{u.last_login ? formatRelative(u.last_login) : 'Jamais'}</span> },
+        ]}
+      />
+    </Card>
   )
 }

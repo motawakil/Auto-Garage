@@ -87,7 +87,7 @@ def _clean(field, value):
 
 
 @transaction.atomic
-def import_oem_workbook(file):
+def import_oem_workbook(file, company):
     """
     Upsert every catalogue line keyed by (brand, model, year, engine, designation).
     Empty cells never overwrite data already completed in the application.
@@ -114,9 +114,9 @@ def import_oem_workbook(file):
             data['compatibility_confirmed'] = False
 
         key = {k: data.pop(k) for k in ('brand', 'model', 'year', 'engine', 'designation')}
-        obj = OemReference.objects.filter(**key).first()
+        obj = OemReference.objects.filter(company=company, **key).first()
         if obj is None:
-            OemReference.objects.create(**key, **data)
+            OemReference.objects.create(company=company, **key, **data)
             stats['created'] += 1
             continue
         changed = False
